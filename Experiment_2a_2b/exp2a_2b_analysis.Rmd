@@ -1,0 +1,1234 @@
+---
+title: "Experiment 2a and 2b Analysis"
+author: "Yiwen Zhang"
+date: "2024-09-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggh4x)
+library(gridExtra)
+library(lme4)
+library(lmerTest)
+library(effsize) 
+library(emmeans)
+library(Hmisc) # for
+library(BayesFactor)
+library(brms)
+library(bayestestR)
+
+# source("")
+```
+
+
+#------veridical agian zero------
+## Causal Strength
+
+```{r}
+load("/Users/YIZ173/Documents/GitHub/delay_intervening_events_studies/Experiment_2a_2b/exp2-clean-data.RData")
+cs_df.short$exp = "Experiment 2a \n (short timeframe)"
+cs_df.long$exp = "Experiment 2b \n (long timeframe)"
+
+cs_df <- rbind(cs_df.short, cs_df.long) %>%
+  mutate(condition = paste("Condition", condition_index))
+
+plot_theme <- theme(
+  panel.margin.y = unit(2, "lines"),
+  panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  text = element_text(size = 16),
+  strip.background = element_rect(fill = "white", color = "white"),
+  strip.placement = "outside",
+  legend.position = "bottom"
+)
+```
+
+
+
+```{r cars, fig.height=6, fig.width=10}
+# causal strength against 0
+cs_df %>%
+  group_by(exp, worker_id, rel_type, cs_type, condition) %>%
+  summarise(cs_value = mean(causal_strength)) -> cs_subj_df
+
+cs_subj_df %>%
+  group_by(exp, rel_type, cs_type, condition) %>%
+  summarise(
+    mean = t.test(cs_value, mu = 0, alternative = "two.sided")$estimate,
+    lower = t.test(cs_value, mu = 0, alternative = "two.sided")$conf.int[1],
+    upper = t.test(cs_value, mu = 0, alternative = "two.sided")$conf.int[2],
+    t = round(t.test(cs_value, mu = 0, alternative = "two.sided")$statistic,3),
+    t.p.value = t.test(cs_value, mu = 0, alternative = "two.sided")$p.value,
+    cohen.d = round(cohen.d(cs_value, f=NA, mu = 0,na.rm =T)$estimate,3),
+    wilcox = round(wilcox.test(cs_value, mu = 0, alternative = "two.sided",exact = F)$statistic,3),
+    wilcox.p = wilcox.test(cs_value, mu = 0, alternative = "two.sided",exact = F)$p.value,
+    BF =exp(ttestBF(cs_value, mu = 0)@bayesFactor$bf)) -> rel_type_smry
+rel_type_smry$cs_type = factor(rel_type_smry$cs_type, levels = c('6', '12', '18', '24'))
+```
+
+
+## Predictive Strength
+
+```{r}
+pred_p_df.short$exp = "Experiment 2a \n (short timeframe)"
+pred_p_df.long$exp = "Experiment 2b \n (long timeframe)"
+
+pred_p_df <- rbind(pred_p_df.short, pred_p_df.long) %>%
+  mutate(condition = paste("Condition", condition_index))
+pred_p_df$half <- factor(pred_p_df$half, levels = c("1-6", "7-12", "13-18", "19-24"))
+pred_p_df$delay <- factor(pred_p_df$delay)
+
+pred_p_df %>%
+  group_by(exp, condition, half) %>%
+  summarise(
+    mean = t.test(pred_strength, mu = 0, alternative = "two.sided")$estimate,
+    lower = t.test(pred_strength, mu = 0, alternative = "two.sided")$conf.int[1],
+    upper = t.test(pred_strength, mu = 0, alternative = "two.sided")$conf.int[2],
+    t = round(t.test(pred_strength, mu = 0, alternative = "two.sided")$statistic,3),
+    t.p.value = t.test(pred_strength, mu = 0, alternative = "two.sided")$p.value,
+    cohen.d = round(cohen.d(pred_strength, f=NA, mu = 0,na.rm =T)$estimate,3),
+    wilcox = round(wilcox.test(pred_strength, mu = 0, alternative = "two.sided",exact = F)$statistic,3),
+    wilcox.p = wilcox.test(pred_strength, mu = 0, alternative = "two.sided",exact = F)$p.value,
+    BF =exp(ttestBF(pred_strength, mu = 0)@bayesFactor$bf)) -> pred_strength_q1
+
+
+# pred_strength_q1$t.p.adjust = p.adjust(pred_strength_q1$t.p.value, method="BH")
+# pred_strength_q1$wilcox.p.adjust = p.adjust(pred_strength_q1$wilcox.p, method="BH")
+pred_strength_smry <- pred_strength_q1 %>%
+  arrange(exp, condition, half) %>%
+  select(exp, condition, half, mean, lower, upper, t, t.p.value, cohen.d, wilcox, wilcox.p, BF) # %>%
+  # write.csv(file = "tables/study2_veriNonVeri_comparison_pred_strength.csv")
+
+pred_strength_smry
+```
+## Adjust p values for causal strength and predictive strength together
+
+if cs_type == "N/A", the rows were for preditive strength
+if half == "N/A", the rows were for causal strength
+
+```{r}
+# adjust p value
+rel_type_test <- rel_type_smry %>%
+  ungroup() %>%
+  subset(rel_type == "veridical") %>%
+    arrange(exp, condition, cs_type) %>%
+  select(exp, condition, cs_type, mean, lower, upper, t, t.p.value, cohen.d, wilcox, wilcox.p, BF)
+
+rbind(pred_strength_smry, rel_type_test) %>%
+  group_by(exp) %>%
+  mutate(t.p.adjust = p.adjust(t.p.value, method="BH"),
+         wilcox.p.adjust = p.adjust(wilcox.p, method="BH")) %>%
+  select(exp, condition, cs_type, half, mean, lower, upper, t, t.p.value, t.p.adjust, cohen.d, wilcox, wilcox.p, wilcox.p.adjust, BF) ->  veri_against_0_results_bind
+# veri_against_0_results_bind %>%  write.csv(file = "tables/study2_veri_against_0.csv")
+
+veri_against_0_results_bind
+```
+
+## figures
+
+
+```{r fig.height=6, fig.width=10}
+# figure for causal strength against 0 in exp 2a and 2b
+veri_against_0_results_bind %>%
+  subset(!is.na(cs_type)) %>%
+  ggplot(aes(x = factor(cs_type), y = mean, group = 1)) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_line(linetype="dashed", position = position_dodge(width = 0.5)) +
+  geom_point(position = position_dodge(width = 0.5), size = 3) +
+  geom_errorbar(position = position_dodge(width = 0.5), aes(ymin = lower, ymax = upper),width = 0.5) +
+  facet_grid2(rows = vars(exp), cols = vars(condition), axes = "all", switch = "y") +
+  scale_y_continuous(breaks = seq(-1,3,1), limits = c(-1,3)) +
+  theme_bw() +
+  plot_theme +
+  theme(panel.margin.y = unit(3, "lines"),
+        panel.margin.x = unit(1, "lines"),
+        legend.position = "none",
+        legend.direction="vertical")+
+  labs(x = "Trial", y = "Causal Strength", color = "", shape = "") +
+  geom_text(aes(label = ifelse(t.p.adjust < 0.001, "***", ifelse( t.p.adjust < 0.01, "**", ifelse(t.p.adjust < 0.05, "*", "")))),
+    y = 2.5, vjust=0, size = 5)-> p1
+p1
+# ggsave(plot = p1, filename = "figures/Study 2 veridical causal against 0.png",
+#        scale = 3,
+#         width = 1000,
+#         height = 500,
+#         units = c("px"),
+#         dpi = 300)
+```
+
+```{r fig.height=6, fig.width=10}
+# figure for predictive strength against 0 in exp 2a and 2b
+veri_against_0_results_bind %>%
+  subset(is.na(cs_type)) %>%
+  ggplot(aes(x = factor(half), y = mean, group = 1)) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_line(position = position_dodge(width = 0.5), linetype = "dashed") + 
+  geom_point(position = position_dodge(width = 0.5), size = 3) +
+  geom_errorbar(position = position_dodge(width = 0.5), aes(ymin = lower, ymax = upper), width = 0.5) +
+  facet_grid2(rows = vars(exp), cols = vars(condition), axes = "all", switch = "y") +
+  ylab("Predictive Strength") +
+  labs(x = "Trial", y = "Predictive Strength", color = "", shape = "") +
+  ylim(-0.5,4.5) +
+  theme_bw() +
+  plot_theme  +
+  theme(panel.margin.y = unit(3, "lines"),
+        panel.margin.x = unit(1, "lines"),
+        legend.position = "bottom",
+        legend.direction="vertical") +
+  geom_text(aes(label = ifelse(t.p.adjust < 0.001, "***", ifelse(t.p.adjust < 0.01, "**", ifelse(t.p.adjust < 0.05, "*", "")))),
+    y = 4, vjust=0, size = 5)-> p4
+p4
+# ggsave(plot = p4, filename = "figures/Study 2 prediction strength agianst 0.png",
+#        scale = 3,
+#         width = 1000,
+#         height = 500,
+#         units = c("px"),
+#         dpi = 300)
+  # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+#-----intervening events------
+
+## prep data
+
+```{r}
+# prep data and code the conditions for causal strength
+conditions.short <- 
+  data.frame(condition_index = c(1,1,2,2,3,3),
+             cause_order = c("c1", "c3", "c1", "c3", "c1", "c3"),
+             # effect_order = c("e1","e3","e1","e3","e1","e3"),
+             delay = c(3, 1, 9, 3, 11, 9),
+             intvn = c("2 events","no event","2 events","no event","2 events","no event"))
+
+cs_df.short %>%
+  subset(rel_type == "veridical") %>%
+  left_join(conditions.short) -> veri_df.short
+
+
+# condition for exp 2b
+conditions.long <- 
+  data.frame(condition_index = c(1,1,2,2,3,3,4,4),
+             cause_order = c("c1", "c3", "c1", "c3", "c1", "c3", "c1", "c3"),
+             # effect_order = c("e1","e3","e1","e3","e1","e3"),
+             delay = c(3, 1, 9, 3, 11, 9, 0, 0),
+             intvn = c("2 events","no event","2 events","no event","2 events","no event","2 events","no event"))
+
+cs_df.long %>%
+  subset(rel_type == "veridical") %>%
+  left_join(conditions.long) -> veri_df.long
+
+veri_df <- rbind(veri_df.long, veri_df.short)
+veri_df$delay = factor(veri_df$delay)
+veri_df$intvn = factor(veri_df$intvn)
+```
+
+## t tests
+
+```{r warning=TRUE}
+## t tests for Causal Strength
+veri_df %>%
+  subset(delay %in% c(3,9)) %>%
+  group_by(exp, cs_type, delay) %>%
+  summarise(t = t.test(causal_strength ~ intvn, alternative = "two.sided")$statistic,
+    t.p.value = t.test(causal_strength ~ intvn, alternative = "two.sided")$p.value,
+            V = wilcox.test(causal_strength ~ intvn, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$statistic,
+            wilcox.p = wilcox.test(causal_strength ~ intvn, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
+            cohen.d = round(cohen.d(causal_strength ~ intvn,na.rm =T)$estimate,3),
+            BF = round(exp(ttestBF(formula = causal_strength ~ intvn, data = cur_data())@bayesFactor$bf),3)) %>%
+  arrange(exp, delay, cs_type)-> intvn_effects_smry
+
+intvn_effects_smry %>%
+  select(exp, cs_type, delay, t, t.p.value, cohen.d, BF, V, wilcox.p) -> intvn_cs_smry
+
+## t tests for predictive Strength
+pred_p_df %>%
+  subset(delay %in% c(3,9)) %>%
+  group_by(exp, half, delay) %>%
+  summarise(t = t.test(pred_strength ~ intvn, alternative = "two.sided")$statistic,
+    t.p.value = t.test(pred_strength ~ intvn, alternative = "two.sided")$p.value,
+    V = wilcox.test(pred_strength ~ intvn, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$statistic,
+            wilcox.p = wilcox.test(pred_strength ~ intvn, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
+            cohen.d = cohen.d(pred_strength ~ intvn,na.rm =T)$estimate,
+            BF =round(exp(ttestBF(formula = pred_strength ~ intvn, data = cur_data())@bayesFactor$bf),3)) -> ps_intvn_effects_smry
+  
+ps_intvn_effects_smry %>%
+  arrange(exp, delay, half) %>%
+  select(exp, half, delay, t, t.p.value, cohen.d, BF, V, wilcox.p) -> ps_intvn_effects_smry
+
+# adjusting p values
+rbind(intvn_cs_smry, ps_intvn_effects_smry) %>%
+  group_by(exp) %>%
+  mutate(t.p.adjust = p.adjust(t.p.value, method="BH"),
+         wilcox.p.adjust = p.adjust(wilcox.p, method="BH")) %>%
+  select(exp, delay, cs_type, half, t, t.p.value, t.p.adjust, cohen.d, V, wilcox.p, wilcox.p.adjust, BF) #%>%
+  # write.csv("tables/study2_intvn_comparison.csv")
+
+```
+
+
+## figures
+
+```{r echo=FALSE, fig.height=6, fig.width=7}
+# Causal Strength separated by intervening events
+veri_df %>%
+  # subset(delay %in% c(3,9)) %>%
+  group_by(exp, cs_type, delay, intvn, condition_index) %>%
+  summarise(
+    mean = mean(causal_strength),
+    lower = t.test(causal_strength, mu = 0, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$conf.int[1],
+    upper = t.test(causal_strength, mu = 0, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$conf.int[2],
+    t.p.value = t.test(causal_strength, mu = 0, alternative = "two.sided")$p.value,
+    wilcox.p = wilcox.test(causal_strength, mu = 0, alternative = "two.sided",exact = F)$p.value,
+    cohen.d = cohen.d(causal_strength, f=NA, mu = 0,na.rm =T)$estimate,
+    BF =exp(ttestBF(causal_strength, mu = 0)@bayesFactor$bf)
+  ) -> veri_df_smry
+
+
+# the effect of intervening events
+veri_df_smry %>%
+  subset(delay %in% c(3,9)) %>%
+  mutate(delay_name = paste("Delay =", delay)) %>%
+  ggplot(aes(x = factor(cs_type), y = mean, color = intvn, group = intvn)) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_point(position=position_dodge(width=0.3), aes(shape = intvn), size = 3) +
+  geom_line(linetype="dashed") +
+  # geom_col(position=position_dodge(width=0.9), aes(fill = intvn)) +
+  geom_errorbar(position=position_dodge(width=0.3), aes(ymin = lower, ymax = upper), width = 0.3) +
+  facet_grid2(exp~delay_name, axes = "all") +
+  labs(y = "Causal Strength (Veridical)", color = "", shape = "") +
+  theme_bw() +
+  plot_theme +
+  scale_y_continuous(breaks = seq(-1,3,1), limits = c(-1,3)) +
+  scale_color_hue(h = c(180, 300)) +
+  theme(panel.margin.y = unit(3, "lines"),
+        panel.margin.x = unit(1, "lines"),
+        legend.position = "left",
+        legend.direction="vertical") + 
+  xlab("Trial") -> p2
+p2
+
+# ggsave(plot = p2, filename = "figures/Study 2 the influence of intervening events.png",
+#        scale = 3,
+#         width = 700,
+#         height = 600,
+#         units = c("px"),
+#         dpi = 300)
+```
+
+
+```{r echo=FALSE, fig.height=6, fig.width=7}
+# Predictive Strength separated by intervening events
+pred_p_df %>%
+  group_by(exp, delay, intvn, half) %>%
+  summarise(
+    mean = t.test(pred_strength, mu = 0, alternative = "two.sided")$estimate,
+    lower = t.test(pred_strength, mu = 0, alternative = "two.sided")$conf.int[1],
+    upper = t.test(pred_strength, mu = 0, alternative = "two.sided")$conf.int[2],
+    t.p.value = t.test(pred_strength, mu = 0, alternative = "two.sided")$p.value,
+    cohen.d = cohen.d(pred_strength, f=NA, mu = 0,na.rm =T)$estimate,
+    BF =exp(ttestBF(pred_strength, mu = 0)@bayesFactor$bf)) %>%
+  arrange(half, intvn, delay)-> pred_strength_df_smry
+
+pred_strength_df_smry %>%
+  subset(delay %in% c(3,9)) %>%
+  ggplot(aes(x = factor(half), y = mean, color = intvn, group = intvn)) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_point(position=position_dodge(width=0.3), aes(shape = intvn), size = 3) +
+  geom_line(linetype="dashed") +
+  # geom_col(position=position_dodge(width=0.9), aes(fill = intvn)) +
+  geom_errorbar(position=position_dodge(width=0.3), aes(ymin = lower, ymax = upper), width = 0.3) +
+  facet_grid2(exp~delay, axes = "all") +
+  labs(y = "Predictive Strength", color = "", shape = "") +
+  theme_bw() +
+  plot_theme +
+  # scale_y_continuous(breaks = seq(-1,3,1), limits = c(-1,3)) +
+  scale_color_hue(h = c(180, 300)) +
+  theme(panel.margin.y = unit(3, "lines"),
+        panel.margin.x = unit(1, "lines"),
+        legend.position = "left",
+        legend.direction="vertical") + 
+  xlab("Trial") ->  p5
+p5
+
+# ggsave(plot = p5, filename = "figures/Study 2 the influence of intervening events (pred strength).png",
+#        scale = 3,
+#         width = 700,
+#         height = 600,
+#         units = c("px"),
+#         dpi = 300)
+```
+
+
+
+#-----the influence of delay------
+
+## spearman correlation tests
+
+```{r}
+# spearman correlation for causal strength
+veri_df %>%
+  mutate(delay_num = as.numeric(as.character(delay))) %>%
+  group_by(exp, cs_type, intvn) %>%
+  summarise(
+    spearman_rho = cor(delay_num, causal_strength, method = "spearman"),
+    p_value = cor.test(delay_num, causal_strength, method = "spearman")$p.value,
+    bayes_factor = exp(correlationBF(rank(delay_num), rank(causal_strength))@bayesFactor$bf)
+  ) -> delay_spearman
+
+# spearman correlation for causal strength
+pred_p_df %>%
+  mutate(delay_num = as.numeric(as.character(delay))) %>%
+  group_by(exp, half, intvn) %>%
+  summarise(
+    spearman_rho = cor(delay_num, pred_strength, method = "spearman"),
+    p_value = cor.test(delay_num, pred_strength, method = "spearman")$p.value,
+    bayes_factor = exp(correlationBF(rank(delay_num), rank(pred_strength))@bayesFactor$bf)
+  ) -> delay_spearman_pred
+
+# adjusting p values
+delay_spearman$measure = "causal_strength"
+delay_spearman_pred$measure = "pred_strength"
+rbind(delay_spearman, delay_spearman_pred) %>%
+  group_by(exp) %>%
+  mutate(p.adjust = p.adjust(p_value, method="BH")) %>%
+  arrange(exp, measure, intvn, cs_type) %>%
+  select(exp,measure, intvn, cs_type,spearman_rho,p_value,p.adjust,bayes_factor)  -> delay_spearman_combined
+delay_spearman_combined
+# delay_spearman_combined %>%
+#   write.csv("tables/study2_delay_spearman.csv")
+```
+
+## figures
+
+```{r}
+# figure for causal strength separated by delay
+veri_df_smry %>%
+  # subset(exp == "Experiment 2a \n (short timeframe)") %>%
+  ggplot(aes(x = cs_type, y = mean, color = factor(delay), group = factor(delay)))+
+  # geom_line(position=position_dodge(width=0.5), aes(linetype = factor(delay))) +
+  geom_line(position=position_dodge(width=0.5), linetype = "dotted") +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_errorbar(position=position_dodge(width=0.5), aes(ymin = lower, ymax = upper), width = 0.3) +
+  geom_point(position=position_dodge(width=0.5), size = 6, fill = "white", shape = 21) +
+  geom_text(aes(label = factor(delay)), position=position_dodge(width=0.5) ) +
+  facet_nested(exp~intvn, axes = "x", scales = "free") +
+  ylab("Causal Strength") +
+  theme_bw() +
+  theme(text = element_text(size = 20)) +
+  scale_y_continuous(breaks = seq(0,3,1), limits = c(-0.5,3)) +
+  scale_color_manual(values = c("#c0c5ce", "#a7adba", "#65737e", "#4f5b66", "#343d46")) + # #c0c5ce
+  # scale_colour_brewer(palette = "Set1") +
+  # scale_linetype_manual(values = c("solid", "longdash", "dashed", "twodash", "dotted")) +
+  xlab("Delay (hours)") +
+  plot_theme +
+  # scale_color_hue(h = c(180, 300)) +
+  theme(panel.margin.y = unit(3, "lines"),
+        panel.margin.x = unit(0.5, "lines")) -> p3.3
+p3.3
+
+# ggsave(plot = p3.3, filename = "figures/Study 2 the influence of delays [color].png",
+#        scale = 3,
+#         width = 700,
+#         height = 700,
+#         units = c("px"),
+#         dpi = 300)
+```
+```{r}
+# figure for predictive strength separated by delay
+pred_strength_df_smry %>%
+  # subset(exp == "Experiment 2a \n (short timeframe)") %>%
+  ggplot(aes(x = half, y = mean, color = factor(delay), group = factor(delay)))+
+  # geom_line(position=position_dodge(width=0.5), aes(linetype = factor(delay))) +
+  geom_line(position=position_dodge(width=0.5), linetype = "dotted") +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_errorbar(position=position_dodge(width=0.5), aes(ymin = lower, ymax = upper), width = 0.3) +
+  geom_point(position=position_dodge(width=0.5), size = 6, fill = "white", shape = 21) +
+  geom_text(aes(label = factor(delay)), position=position_dodge(width=0.5) ) +
+  facet_nested(exp~intvn, axes = "x", scales = "free") +
+  ylab("Causal Strength") +
+  theme_bw() +
+  theme(text = element_text(size = 20)) +
+  scale_y_continuous(breaks = seq(-1,4,1), limits = c(-0.5,4.5)) +
+  scale_color_manual(values = c("#c0c5ce", "#a7adba", "#65737e", "#4f5b66", "#343d46")) + # #c0c5ce
+  # scale_linetype_manual(values = c("solid", "longdash", "dashed", "twodash", "dotted")) +
+  xlab("Delay (hours)") +
+  plot_theme +
+  # scale_color_hue(h = c(180, 300)) +
+  theme(panel.margin.y = unit(3, "lines"),
+        panel.margin.x = unit(0.5, "lines")) -> p6.3
+p6.3
+# ggsave(plot = p6.3, filename = "figures/Study 2 the influence of delays (Pred strength).png",
+#        scale = 3,
+#         width = 1000,
+#         height = 700,
+#         units = c("px"),
+#         dpi = 300)
+```
+
+
+#-----Comparing conditions-----
+
+```{r fig.height=6, fig.width=5}
+# these figures are not included in manuscript but very useful to compare across conditions
+rel_type_smry %>%
+  subset(rel_type == "veridical") %>%
+  ggplot(aes(x = factor(cs_type), y = mean, color = factor(condition), group = factor(condition))) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_point(position = position_dodge(width = 0.5)) +
+  geom_line(position = position_dodge(width = 0.5)) +
+  # geom_col(position = position_dodge(width = 0.9)) + 
+  geom_errorbar(position = position_dodge(width = 0.5), aes(ymin = lower, ymax = upper), width = 0.3) +
+  facet_wrap(~exp,ncol=1, scales = "free_x") +
+  theme_bw() +
+  plot_theme +
+  theme(legend.position = "left")+
+  labs(x = "trial", y = "Causal Strength", color = "Condition")-> p1
+p1
+
+
+pred_p_df %>%
+  group_by(exp, condition_index, half) %>%
+  summarise(
+    mean = t.test(pred_strength, mu = 0, alternative = "two.sided")$estimate,
+    lower = t.test(pred_strength, mu = 0, alternative = "two.sided")$conf.int[1],
+    upper = t.test(pred_strength, mu = 0, alternative = "two.sided")$conf.int[2],
+    t.p.value = round(t.test(pred_strength, mu = 0, alternative = "two.sided")$p.value,3),
+    cohen.d = round(cohen.d(pred_strength, f=NA, mu = 0,na.rm =T)$estimate,3),
+    wilcox.p = round(wilcox.test(pred_strength, mu = 0, alternative = "two.sided",exact = F)$p.value,3),
+    BF =exp(ttestBF(pred_strength, mu = 0)@bayesFactor$bf)) %>%
+  ggplot(aes(x = factor(half), y = mean, fill = factor(condition_index), group = factor(condition_index))) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_col(position = position_dodge(width = 0.9)) + 
+  # geom_point(position = position_dodge(width = 0.5)) +
+  geom_errorbar(position = position_dodge(width = 0.9), aes(ymin = lower, ymax = upper) , width = 0.3) +
+  facet_grid(.~exp, switch="y") +
+  theme_bw() +
+  plot_theme +
+  # ylim(-4,4) +
+  labs(x = "Trial", y = "Predictive Strength", fill = "Condition")
+```
+
+
+## regression analysis
+
+### exp 2a
+
+#### causal strength
+```{r}
+# regression analysis
+veri_df.short$time <- as.numeric(veri_df.short$cs_type)-2.5
+veri_df.short$condition_index <- factor(veri_df.short$condition_index)
+veri_df.short$delay_time <- as.numeric(veri_df.short$delay)
+contrasts(veri_df.short$condition_index) <- contr.treatment(3, base = 2)
+contrasts(veri_df.short$condition_index)
+model <- lmer(causal_strength ~ time * condition_index + (1+time|worker_id), data = veri_df.short)
+summary(model)
+# Get estimated marginal means for each group at each time point
+emm <- emmeans(model, ~ condition_index | time)
+# Pairwise comparisons for each time point
+contrast_results <- pairs(emm)
+print(contrast_results)
+
+car::linearHypothesis(model, "condition_index1 - condition_index3 = 0")
+```
+
+
+
+```{r}
+# get Bayes Factor
+# Define the model formula
+formula <- bf(causal_strength ~ condition_index * time + (time| worker_id))
+
+# use default priors for different parameters
+priors <- c(
+  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
+  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
+  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
+  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
+)
+# Fit the model with specified Cauchy priors
+bayesian_model <- brm(
+  formula = formula,
+  data = subset(veri_df.short, rel_type == "veridical"),
+  family = gaussian(),  # Gaussian family, adjust if needed
+  prior = priors,
+  chains = 4,
+  iter = 2000,
+  cores = 4
+)
+summary(bayesian_model)
+
+# Calculate Bayes factors for each predictor
+bayes_factors <- bayesfactor_parameters(bayesian_model)
+print(bayes_factors)
+```
+
+
+#### predictive strength
+```{r}
+# regression
+time_mapping <- c(
+  '1-6' = 0,
+  '7-12' = 1,
+  '13-18' = 2,
+  '19-24' = 3
+)
+
+pred_p_df.short$time <- scale(time_mapping[pred_p_df.short$half])
+pred_p_df.short$condition_index <- factor(pred_p_df.short$condition_index)
+contrasts(pred_p_df.short$condition_index) <- contr.treatment(3, base = 2)
+contrasts(pred_p_df.short$condition_index)
+model <- lmer(pred_strength ~ condition_index * time + (time|task_id), data = pred_p_df.short)
+summary(model)
+# Get estimated marginal means for each group at each time point
+emm <- emmeans(model, ~ condition_index | time)
+# Pairwise comparisons for each time point
+contrast_results <- pairs(emm)
+print(contrast_results)
+
+```
+
+
+```{r}
+# Bayes Factor
+formula <- bf(pred_strength ~ condition_index * time + (time | task_id))
+
+# Set Cauchy priors for different parameters
+priors <- c(
+  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
+  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
+  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
+  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
+)
+# Fit the model with specified Cauchy priors
+bayesian_model <- brm(
+  formula = formula,
+  data = pred_p_df.short,
+  family = gaussian(),  # Gaussian family, adjust if needed
+  prior = priors,
+  sample_prior = "yes",
+  chains = 4,
+  iter = 2000,
+  cores = 4
+)
+summary(bayesian_model)
+
+# Calculate Bayes factors for each predictor
+bayes_factors <- bayesfactor_parameters(bayesian_model)
+print(bayes_factors)
+
+emm <- emmeans(bayesian_model,  ~ condition_index | time)
+pairwise_results <- pairs(emm)
+print(pairwise_results)
+```
+
+### exp 2b
+
+#### causal strength
+```{r}
+# regression analysis
+cs_df.long$condition_index <- factor(cs_df.long$condition_index)
+cs_df.long$time <- as.numeric(cs_df.long$cs_type)-2.5
+contrasts(cs_df.long$condition_index) <- contr.treatment(4, base = 2)
+contrasts(cs_df.long$condition_index)
+
+model <- lmer(causal_strength ~ condition_index * time + (time|worker_id), data = subset(cs_df.long, rel_type == "veridical"))
+summary(model)
+# Get estimated marginal means for each group at each time point
+emm <- emmeans(model, ~ condition_index*time | time)
+# Pairwise comparisons for each time point
+contrast_results <- pairs(emm)
+print(contrast_results)
+car::linearHypothesis(model, "condition_index1 - condition_index4 = 0")
+```
+
+```{r}
+# Bayes Factor
+formula <- bf(causal_strength ~ condition_index * time + (1| worker_id))
+
+# Set Cauchy priors for different parameters
+priors <- c(
+  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
+  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
+  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
+  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
+)
+# Fit the model with specified Cauchy priors
+bayesian_model <- brm(
+  formula = formula,
+  data = subset(cs_df.long, rel_type == "veridical"),
+  family = gaussian(),  # Gaussian family, adjust if needed
+  prior = priors,
+  chains = 4,
+  iter = 2000,
+  cores = 4
+)
+summary(bayesian_model)
+
+# Calculate Bayes factors for each predictor
+bayes_factors <- bayesfactor_parameters(bayesian_model)
+print(bayes_factors)
+
+
+```
+
+#### predictive strength
+
+```{r}
+pred_p_df.long$condition_index <- factor(pred_p_df.long$condition_index)
+pred_p_df.long$time <- as.numeric(pred_p_df.long$half)-2.5 # center trial number
+contrasts(pred_p_df.long$condition_index) <- contr.treatment(4, base = 2)
+contrasts(pred_p_df.long$condition_index)
+summary(lmer(pred_strength ~ condition_index * time + (time|task_id), data = pred_p_df.long))
+
+# Define the model formula
+formula <- bf(pred_strength ~ condition_index * time + (time | task_id))
+
+# Set Cauchy priors for different parameters
+priors <- c(
+  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
+  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
+  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
+  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
+)
+# Fit the model with specified Cauchy priors
+bayesian_model <- brm(
+  formula = formula,
+  data = pred_p_df.long,
+  family = gaussian(),  # Gaussian family, adjust if needed
+  prior = priors,
+  chains = 4,
+  iter = 2000,
+  cores = 4
+)
+summary(bayesian_model)
+
+# Calculate Bayes factors for each predictor
+bayes_factors <- bayesfactor_parameters(bayesian_model)
+print(bayes_factors)
+```
+
+
+#-------Exp2a vs Exp2b--------
+
+## regression for veridical ratings
+```{r}
+# regression comparing short and long 
+cs_df$trial = as.numeric(factor(cs_df$cs_type, levels = c('6','12','18','24'))) - 2.5
+model <- lmer(causal_strength ~ trial*exp + (trial|worker_id), data = subset(cs_df, rel_type == "veridical"))
+summary(model)
+
+# Bayes Factor for regression coefficient
+formula <- bf(causal_strength ~ trial*exp + (trial|worker_id))
+priors <- c(
+  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
+  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
+  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
+  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
+)
+# Fit the model with specified Cauchy priors
+bayesian_model <- brm(
+  formula = formula,
+  data = subset(cs_df, rel_type == "veridical"),
+  family = gaussian(),  # Gaussian family, adjust if needed
+  prior = priors,
+  chains = 4,
+  iter = 2000,
+  cores = 4
+)
+summary(bayesian_model)
+
+# Calculate Bayes factors for each predictor
+bayes_factors <- bayesfactor_parameters(bayesian_model)
+print(bayes_factors)
+```
+
+```{r}
+pred_p_df$trial = as.numeric(factor(pred_p_df$half)) - 2.5
+model <- lmer(pred_strength ~ trial*exp + (trial|task_id), data = pred_p_df)
+summary(model)
+
+# Define the model formula
+formula <- bf(pred_strength ~ trial*exp + (trial|task_id))
+
+# Set Cauchy priors for different parameters
+priors <- c(
+  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
+  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
+  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
+  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
+)
+# Fit the model with specified Cauchy priors
+bayesian_model <- brm(
+  formula = formula,
+  data = pred_p_df,
+  family = gaussian(),  # Gaussian family, adjust if needed
+  prior = priors,
+  chains = 4,
+  iter = 2000,
+  cores = 4
+)
+summary(bayesian_model)
+
+# Calculate Bayes factors for each predictor
+bayes_factors <- bayesfactor_parameters(bayesian_model)
+print(bayes_factors)
+```
+
+## regression for non-veridical
+
+```{r}
+nonVeri_abs
+
+nonVeri_abs$trial = as.numeric(factor(nonVeri_abs$cs_type, levels = c('6','12','18','24'))) - 2.5
+model <- lmer(abs_cs ~ trial*exp + (trial|worker_id), data = nonVeri_abs)
+summary(model)
+
+# Define the model formula
+formula <- bf(abs_cs ~ trial*exp + (trial|worker_id))
+
+# Set Cauchy priors for different parameters
+priors <- c(
+  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
+  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
+  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
+  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
+)
+# Fit the model with specified Cauchy priors
+bayesian_model <- brm(
+  formula = formula,
+  data = nonVeri_abs,
+  family = gaussian(),  # Gaussian family, adjust if needed
+  prior = priors,
+  chains = 4,
+  iter = 2000,
+  cores = 4
+)
+summary(bayesian_model)
+
+# Calculate Bayes factors for each predictor
+bayes_factors <- bayesfactor_parameters(bayesian_model)
+print(bayes_factors)
+
+```
+
+# ------- Appendix or Supplymental Material------------------
+
+
+## t tests for the effect of delays 
+
+(this is in the registration, but replaced by spearman test in the manuscript)
+
+```{r}
+# pairwise t tests for causal strength
+run_delay_tests <- function(data, intvn_value, delay_values, comparison_label, exp_label) {
+  data %>%
+    subset(intvn == intvn_value & delay %in% delay_values) %>%
+    mutate(delay = factor(delay, levels = delay_values)) %>%
+    group_by(cs_type) %>%
+    summarise(
+      t.statistic = t.test(causal_strength ~ delay, alternative = "two.sided")$statistic,
+      t.p.value = t.test(causal_strength ~ delay, alternative = "two.sided")$p.value,
+      wilcox.statistic = wilcox.test(causal_strength ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$statistic,
+      wilcox.p.value = wilcox.test(causal_strength ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
+      cohen.d = cohen.d(causal_strength ~ delay, na.rm = TRUE)$estimate,
+      BF = round(exp(ttestBF(formula = causal_strength ~ delay, data = cur_data())@bayesFactor$bf), 3)
+    ) %>%
+    mutate(
+      comparison = comparison_label,
+      intvn = intvn_value,
+      exp = exp_label
+    )
+}
+
+# List of comparisons and corresponding parameters
+comparisons <- list(
+  list(data = veri_df.long, intvn_value = "no event", delay_values = c(0, 1), comparison = "0 vs 1", exp = "long"),
+  list(data = veri_df.long, intvn_value = "no event", delay_values = c(1, 3), comparison = "1 vs 3", exp = "long"),
+  list(data = veri_df.long, intvn_value = "no event", delay_values = c(3, 9), comparison = "3 vs 9", exp = "long"),
+  list(data = veri_df.long, intvn_value = "2 events", delay_values = c(0, 3), comparison = "0 vs 3", exp = "long"),
+  list(data = veri_df.long, intvn_value = "2 events", delay_values = c(3, 9), comparison = "3 vs 9", exp = "long"),
+  list(data = veri_df.long, intvn_value = "2 events", delay_values = c(9, 11), comparison = "9 vs 11", exp = "long"),
+  list(data = veri_df.short, intvn_value = "no event", delay_values = c(1, 3), comparison = "1 vs 3", exp = "short"),
+  list(data = veri_df.short, intvn_value = "no event", delay_values = c(3, 9), comparison = "3 vs 9", exp = "short"),
+  list(data = veri_df.short, intvn_value = "2 events", delay_values = c(3, 9), comparison = "3 vs 9", exp = "short"),
+  list(data = veri_df.short, intvn_value = "2 events", delay_values = c(9, 11), comparison = "9 vs 11", exp = "short")
+)
+
+# Run the tests for each comparison and combine the results
+results <- lapply(comparisons, function(comp) {
+  run_delay_tests(
+    data = comp$data,
+    intvn_value = comp$intvn_value,
+    delay_values = comp$delay_values,
+    comparison_label = comp$comparison,
+    exp_label = comp$exp
+  )
+})
+
+# Combine all results into one data frame
+delay_comparisons <- do.call(rbind, results)
+
+# View the final combined results
+delay_comparisons
+
+```
+
+
+```{r}
+# pairwise t tests for predictive strength
+run_delay_tests <- function(data, intvn_value, delay_values, comparison_label, exp_label) {
+  data %>%
+    subset(intvn == intvn_value & delay %in% delay_values) %>%
+    mutate(delay = factor(delay, levels = delay_values)) %>%
+    group_by(half) %>%
+    summarise(
+      t.statistic = t.test(pred_strength ~ delay, alternative = "two.sided")$statistic,
+      t.p.value = t.test(pred_strength ~ delay, alternative = "two.sided")$p.value,
+      wilcox.statistic = wilcox.test(pred_strength ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$statistic,
+      wilcox.p.value = wilcox.test(pred_strength ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
+      cohen.d = cohen.d(pred_strength ~ delay, na.rm = TRUE)$estimate,
+      BF = round(exp(ttestBF(formula = pred_strength ~ delay, data = cur_data())@bayesFactor$bf), 3)
+    ) %>%
+    mutate(
+      comparison = comparison_label,
+      intvn = intvn_value,
+      exp = exp_label
+    )
+}
+
+# List of comparisons and corresponding parameters
+comparisons <- list(
+  list(data = pred_p_df.long, intvn_value = "no event", delay_values = c(0, 1), comparison = "0 vs 1", exp = "long"),
+  list(data = pred_p_df.long, intvn_value = "no event", delay_values = c(1, 3), comparison = "1 vs 3", exp = "long"),
+  list(data = pred_p_df.long, intvn_value = "no event", delay_values = c(3, 9), comparison = "3 vs 9", exp = "long"),
+  list(data = pred_p_df.long, intvn_value = "2 events", delay_values = c(0, 3), comparison = "0 vs 3", exp = "long"),
+  list(data = pred_p_df.long, intvn_value = "2 events", delay_values = c(3, 9), comparison = "3 vs 9", exp = "long"),
+  list(data = pred_p_df.long, intvn_value = "2 events", delay_values = c(9, 11), comparison = "9 vs 11", exp = "long"),
+  list(data = pred_p_df.short, intvn_value = "no event", delay_values = c(1, 3), comparison = "1 vs 3", exp = "short"),
+  list(data = pred_p_df.short, intvn_value = "no event", delay_values = c(3, 9), comparison = "3 vs 9", exp = "short"),
+  list(data = pred_p_df.short, intvn_value = "2 events", delay_values = c(3, 9), comparison = "3 vs 9", exp = "short"),
+  list(data = pred_p_df.short, intvn_value = "2 events", delay_values = c(9, 11), comparison = "9 vs 11", exp = "short")
+)
+
+# Run the tests for each comparison and combine the results
+results <- lapply(comparisons, function(comp) {
+  run_delay_tests(
+    data = comp$data,
+    intvn_value = comp$intvn_value,
+    delay_values = comp$delay_values,
+    comparison_label = comp$comparison,
+    exp_label = comp$exp
+  )
+})
+
+# Combine all results into one data frame
+delay_comparisons_ps <- do.call(rbind, results) %>% rename(cs_type = half)
+
+# View the final combined results
+delay_comparisons_ps 
+
+```
+
+
+```{r}
+## adjust p values
+delay_comparisons$measure = "causal_strength"
+delay_comparisons_ps$measure = "pred_strength"
+rbind(delay_comparisons, delay_comparisons_ps) %>%
+  group_by(exp) %>%
+  mutate(t.p.adjust = p.adjust(t.p.value, method="BH"),
+         wilcox.p.adjust = p.adjust(wilcox.p.value, method="BH")) %>%
+  select(exp, measure, intvn, cs_type, comparison, t.statistic, t.p.value, t.p.adjust, cohen.d, wilcox.statistic, wilcox.p.value, wilcox.p.adjust, BF) %>%
+  arrange(exp, measure, intvn, cs_type, comparison) %>%
+  write.csv("tables/study2_delay_comparison.csv")
+```
+
+
+
+#-----Analyses for Non Veridical-----
+
+
+
+```{r}
+## figures for raw ratings against 0
+rel_type_smry$cs_type = factor(rel_type_smry$cs_type, levels = c('6', '12', '18', '24'))
+rel_type_smry %>%
+  subset(rel_type == "nonVeridical") %>%
+  ggplot(aes(x = factor(cs_type), y = mean, color = rel_type, group = rel_type)) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_line(linetype="dashed", position = position_dodge(width = 0.5)) +
+  geom_point(position = position_dodge(width = 0.5), size = 3, aes(shape = rel_type)) +
+  geom_errorbar(position = position_dodge(width = 0.5), aes(ymin = lower, ymax = upper),width = 0.5) +
+  facet_grid2(rows = vars(exp), cols = vars(condition), axes = "all", switch = "y") +
+  scale_y_continuous(breaks = seq(-1,3,1), limits = c(-1,3)) +
+  scale_color_manual(values = c("black","#162a33")) +
+  theme_bw() +
+  plot_theme +
+  theme(panel.margin.y = unit(3, "lines"),
+        panel.margin.x = unit(1, "lines"),
+        legend.position = "none",
+        legend.direction="none")+
+  labs(x = "Trial", y = "Causal Strength (Non-veridical)", color = "", shape = "")-> p1
+p1
+# ggsave(plot = p1, filename = "figures/Study 2 Non-veridical causal against 0.png",
+#        scale = 3,
+#         width = 1000,
+#         height = 500,
+#         units = c("px"))
+
+# test the raw rating against 0
+rel_type_smry %>%
+  subset(rel_type == "nonVeridical") %>%
+  group_by(exp) %>%
+  mutate(t.p.adjust = p.adjust(t.p.value, method="BH"),
+         wilcox.p.adjust = p.adjust(wilcox.p, method="BH")) %>%
+  select(exp, condition, cs_type, t, t.p.value, t.p.adjust, cohen.d, wilcox, wilcox.p, wilcox.p.adjust, BF) %>%
+  arrange(exp, condition, cs_type) # %>%
+  # write.csv(file = "tables/study2_non-veri_against_0.csv")
+```
+
+
+## getting absolute values for the non-veridical data
+
+```{r}
+cs_df.long %>%
+  subset(rel_type == "nonVeridical") %>%
+  subset(cause_order != "c2") %>%
+  left_join(conditions.long) %>% mutate(abs_cs = abs(causal_strength)) -> nonVeri_abs.long
+
+cs_df.short %>%
+  subset(rel_type == "nonVeridical") %>%
+  subset(cause_order != "c2") %>%
+  left_join(conditions.short) %>% mutate(abs_cs = abs(causal_strength))-> nonVeri_abs.short
+
+nonVeri_abs <- rbind(nonVeri_abs.long, nonVeri_abs.short) %>% mutate(abs_cs = abs(causal_strength))
+
+nonVeri_abs %>%
+  # subset(delay %in% c(3,9)) %>%
+  group_by(exp, cs_type, delay, intvn, condition_index) %>%
+  summarise(
+    mean = mean(abs_cs),
+    lower = t.test(abs_cs, mu = 0, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$conf.int[1],
+    upper = t.test(abs_cs, mu = 0, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$conf.int[2],
+    t.p.value = t.test(abs_cs, mu = 0, alternative = "two.sided")$p.value,
+    wilcox.p = wilcox.test(abs_cs, mu = 0, alternative = "two.sided",exact = F)$p.value,
+    cohen.d = cohen.d(abs_cs, f=NA, mu = 0,na.rm =T)$estimate,
+    BF =exp(ttestBF(abs_cs, mu = 0)@bayesFactor$bf)
+  ) -> nonVeri_abs_smry
+
+```
+
+## intervening events
+
+```{r}
+# t test for the impact of intervening events
+nonVeri_abs %>%
+  subset(delay %in% c(3,9)) %>%
+  mutate(intvn = factor(intvn)) %>%
+  group_by(exp, cs_type, delay) %>%
+  summarise(t = t.test(abs_cs ~ intvn, alternative = "two.sided")$statistic,
+    t.p.value = t.test(abs_cs ~ intvn, alternative = "two.sided")$p.value,
+            V = wilcox.test(abs_cs ~ intvn, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$statistic,
+            wilcox.p = wilcox.test(abs_cs ~ intvn, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
+            cohen.d = round(cohen.d(abs_cs ~ intvn,na.rm =T)$estimate,3),
+            BF = round(exp(ttestBF(formula = abs_cs ~ intvn, data = cur_data())@bayesFactor$bf),3)) %>%
+  arrange(exp, delay, cs_type)-> nonveri_intvn_effects_smry
+
+
+nonveri_intvn_effects_smry %>%
+  group_by(exp) %>%
+  mutate(t.p.adjust = p.adjust(t.p.value, method="BH"),
+         wilcox.p.adjust = p.adjust(wilcox.p, method="BH")) %>%
+  select(exp, delay, cs_type, t, t.p.value, t.p.adjust, cohen.d, V, wilcox.p, wilcox.p.adjust, BF) %>%
+   write.csv("tables/study2_non-veri_intvn_comparison.csv")
+```
+
+
+```{r}
+# the figure of intervening events
+nonVeri_abs_smry %>%
+  subset(delay %in% c(3,9)) %>%
+  mutate(delay_name = paste("Delay =", delay)) %>%
+  ggplot(aes(x = factor(cs_type), y = mean, color = intvn, group = intvn)) +
+  # geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_point(position=position_dodge(width=0.3), aes(shape = intvn), size = 3) +
+  geom_line(linetype="dashed") +
+  # geom_col(position=position_dodge(width=0.9), aes(fill = intvn)) +
+  geom_errorbar(position=position_dodge(width=0.3), aes(ymin = lower, ymax = upper), width = 0.3) +
+  facet_grid2(exp~delay_name, axes = "all") +
+  labs(y = "Causal Strength (Veridical)", color = "", shape = "") +
+  theme_bw() +
+  plot_theme +
+  scale_y_continuous(breaks = seq(0,3,1), limits = c(0,3)) +
+  scale_color_hue(h = c(180, 300)) +
+  theme(panel.margin.y = unit(3, "lines"),
+        panel.margin.x = unit(1, "lines"),
+        legend.position = "none") + 
+  xlab("Trial") -> p2
+p2
+
+ggsave(plot = p2, filename = "figures/Study 2 Non-veridical - intervening events.png",
+       scale = 3,
+        width = 700,
+        height = 500,
+        units = c("px"),
+        dpi = 300)
+```
+
+
+## delay
+
+```{r}
+# spearman t test
+nonVeri_abs %>%
+  mutate(delay_num = as.numeric(as.character(delay))) %>%
+  group_by(exp, cs_type, intvn) %>%
+  summarise(
+    spearman_rho = cor(delay_num, causal_strength, method = "spearman"),
+    p_value = cor.test(delay_num, causal_strength, method = "spearman")$p.value,
+    bayes_factor = exp(correlationBF(rank(delay_num), rank(causal_strength))@bayesFactor$bf)
+  ) %>%
+  mutate(p.adjust = p.adjust(p_value, method="BH")) %>%
+  arrange(exp, intvn, cs_type) %>%
+  select(exp, intvn, cs_type,spearman_rho,p_value,p.adjust,bayes_factor)-> delay_spearman_nonVeri
+
+delay_spearman_nonVeri
+
+# delay_spearman_nonVeri %>%
+#   write.csv("tables/study2_non-veridical_delay_spearman.csv")
+```
+
+```{r fig.height=5, fig.width=8}
+nonVeri_abs_smry %>%
+  # subset(exp == "Experiment 2a \n (short timeframe)") %>%
+  ggplot(aes(x = cs_type, y = mean, color = factor(delay), group = factor(delay)))+
+  # geom_line(position=position_dodge(width=0.5), aes(linetype = factor(delay))) +
+  geom_line(position=position_dodge(width=0.6), linetype = "dotted") +
+  # geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_errorbar(position=position_dodge(width=0.6), aes(ymin = lower, ymax = upper), width = 0.3) +
+  geom_point(position=position_dodge(width=0.6), size = 6, fill = "white", shape = 21) +
+  geom_text(aes(label = factor(delay)), position=position_dodge(width=0.6) ) +
+  facet_nested(exp~intvn, axes = "x", scales = "free") +
+  ylab("Causal Strength") +
+  theme_bw() +
+  scale_y_continuous(breaks = seq(0,3,1), limits = c(0,3)) +
+  scale_color_manual(values = c("#c0c5ce", "#a7adba", "#65737e", "#4f5b66", "#343d46")) + # #c0c5ce
+  # scale_linetype_manual(values = c("solid", "longdash", "dashed", "twodash", "dotted")) +
+  xlab("Delay (hours)") +
+  plot_theme +
+  # scale_color_hue(h = c(180, 300)) +
+  theme(panel.margin.y = unit(3, "lines"),
+        panel.margin.x = unit(0.5, "lines"),
+        legend.position = "none") -> p3.5
+p3.5
+# ggsave(plot = p3.3, filename = "figures/Study 2 Non-veridical - delays.png",
+#        scale = 3,
+#         width = 700,
+#         height = 500,
+#         units = c("px"),
+#         dpi = 300)
+```
+
+
+```{r}
+# t tests for the impact of delay (registered but not in the manuscript)
+
+run_non_veri_delay_tests <- function(data, intvn_value, delay_values, comparison_label, exp_label) {
+  data %>%
+    subset(intvn == intvn_value & delay %in% delay_values) %>%
+    mutate(delay = factor(delay)) %>%
+    group_by(cs_type) %>%
+    summarise(
+      t.statistic = t.test(abs_cs ~ delay, alternative = "two.sided")$statistic,
+      t.p.value = t.test(abs_cs ~ delay, alternative = "two.sided")$p.value,
+      wilcox.statistic = wilcox.test(abs_cs ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$statistic,
+      wilcox.p.value = wilcox.test(abs_cs ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
+      cohen.d = cohen.d(abs_cs ~ delay, na.rm = TRUE)$estimate,
+      BF = round(exp(ttestBF(formula = abs_cs ~ delay, data = cur_data())@bayesFactor$bf), 3)
+    ) %>%
+    mutate(
+      comparison = comparison_label,
+      intvn = intvn_value,
+      exp = exp_label
+    )
+}
+
+# List of comparisons and corresponding parameters
+comparisons <- list(
+  list(data = nonVeri_abs.long, intvn_value = "no event", delay_values = c(0, 1), comparison = "0 vs 1", exp = "long"),
+  list(data = nonVeri_abs.long, intvn_value = "no event", delay_values = c(3, 1), comparison = "1 vs 3", exp = "long"),
+  list(data = nonVeri_abs.long, intvn_value = "no event", delay_values = c(3, 9), comparison = "3 vs 9", exp = "long"),
+  list(data = nonVeri_abs.long, intvn_value = "2 events", delay_values = c(0, 3), comparison = "0 vs 3", exp = "long"),
+  list(data = nonVeri_abs.long, intvn_value = "2 events", delay_values = c(3, 9), comparison = "3 vs 9", exp = "long"),
+  list(data = nonVeri_abs.long, intvn_value = "2 events", delay_values = c(11, 9), comparison = "9 vs 11", exp = "long"),
+  list(data = nonVeri_abs.short, intvn_value = "no event", delay_values = c(3, 1), comparison = "1 vs 3", exp = "short"),
+  list(data = nonVeri_abs.short, intvn_value = "no event", delay_values = c(3, 9), comparison = "3 vs 9", exp = "short"),
+  list(data = nonVeri_abs.short, intvn_value = "2 events", delay_values = c(3, 9), comparison = "3 vs 9", exp = "short"),
+  list(data = nonVeri_abs.short, intvn_value = "2 events", delay_values = c(11, 9), comparison = "9 vs 11", exp = "short")
+)
+
+# Run the tests for each comparison and combine the results
+results <- lapply(comparisons, function(comp) {
+  run_non_veri_delay_tests(
+    data = comp$data,
+    intvn_value = comp$intvn_value,
+    delay_values = comp$delay_values,
+    comparison_label = comp$comparison,
+    exp_label = comp$exp
+  )
+})
+
+# Combine all results into one data frame
+delay_comparisons <- do.call(rbind, results)
+
+# View the final combined results
+delay_comparisons %>%
+  group_by(exp) %>%
+  mutate(t.p.adjust = p.adjust(t.p.value, method="BH"),
+         wilcox.p.adjust = p.adjust(wilcox.p.value, method="BH")) %>%
+  select(exp, intvn, cs_type, comparison, t.statistic, t.p.value, t.p.adjust, cohen.d, wilcox.statistic, wilcox.p.value, wilcox.p.adjust, BF) %>%
+  arrange(exp, intvn, cs_type, comparison) %>%
+  write.csv("tables/study2_non-veridical_delay_comparison.csv")
+
+```
+
+## comparing conditions
+```{r}
+nonVeri_abs
+
+nonVeri_abs.short$time <- as.numeric(nonVeri_abs.short$cs_type)-2.5
+nonVeri_abs.short$condition_index <- factor(nonVeri_abs.short$condition_index)
+nonVeri_abs.short$delay_time <- as.numeric(nonVeri_abs.short$delay)
+contrasts(nonVeri_abs.short$condition_index) <- contr.treatment(3, base = 2)
+contrasts(nonVeri_abs.short$condition_index)
+model <- lmer(causal_strength ~ time * condition_index + (1+time|worker_id), data = nonVeri_abs.short)
+summary(model)
+# Get estimated marginal means for each group at each time point
+emm <- emmeans(model, ~ condition_index | time)
+# Pairwise comparisons for each time point
+contrast_results <- pairs(emm)
+print(contrast_results)
+```
+
+```{r}
+nonVeri_abs
+
+nonVeri_abs.long$time <- as.numeric(nonVeri_abs.long$cs_type)-2.5
+nonVeri_abs.long$condition_index <- factor(nonVeri_abs.long$condition_index)
+nonVeri_abs.long$delay_time <- as.numeric(nonVeri_abs.long$delay)
+contrasts(nonVeri_abs.long$condition_index) <- contr.treatment(4, base = 2)
+contrasts(nonVeri_abs.long$condition_index)
+model <- lmer(causal_strength ~ time * condition_index + (1+time|worker_id), data = nonVeri_abs.long)
+summary(model)
+# Get estimated marginal means for each group at each time point
+emm <- emmeans(model, ~ condition_index | time)
+# Pairwise comparisons for each time point
+contrast_results <- pairs(emm)
+print(contrast_results)
+```
+
+

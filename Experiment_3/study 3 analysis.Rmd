@@ -1,0 +1,404 @@
+---
+title: "Experiment 3-analysis"
+author: "Yiwen Zhang"
+date: "2024-09-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggh4x)
+library(gridExtra)
+library(lme4)
+library(lmerTest)
+library(effsize)
+library(effectsize)
+library(emmeans)
+library(Hmisc) # for
+library(BayesFactor)
+library(brms)
+library(bayestestR)
+
+```
+
+```{r}
+plot_theme <- theme(
+  panel.margin.y = unit(2, "lines"),
+  panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  text = element_text(size = 16),
+  strip.background = element_rect(fill = "white", color = "white"),
+  strip.placement = "outside",
+  legend.position = "bottom"
+)
+```
+
+#-----Causal strength-------
+
+## figure
+
+```{r cars, fig.height=4, fig.width=12}
+load("/Users/YIZ173/Documents/GitHub/delay_intervening_events_studies/Experiment_3/exp3-clean-data.RData")
+
+cs_subj %>%
+  group_by(rel_type, cs_type, condition, causal_model, intvn) %>%
+  # group_by(rel_type, cs_type) %>%
+  summarise(
+    mean = t.test(cs_value, mu = 0, alternative = "two.sided")$estimate,
+    lower = t.test(cs_value, mu = 0, alternative = "two.sided")$conf.int[1],
+    upper = t.test(cs_value, mu = 0, alternative = "two.sided")$conf.int[2]) -> rel_type_smry
+
+rel_type_smry$rel_type = factor(rel_type_smry$rel_type, levels = c("veri", "non_veri"), label = c("Veridical", "Non Veridical"))
+rel_type_smry$intvn = factor(rel_type_smry$intvn, levels = c("intvn","adjacent"), label = c("Intervening","Adjacent"))
+rel_type_smry$causal_model = factor(rel_type_smry$causal_model, levels = c("3c1e", "1c3e"), label = c("Multiple Causes", "Multiple Effects"))
+rel_type_smry %>%
+  ggplot(aes(x = factor(cs_type), y = mean, color = rel_type, group = rel_type)) +
+  # geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_line(linetype="dashed", position = position_dodge(width = 0.9)) +
+  geom_point(position = position_dodge(width = 0.9), size = 3) +
+  geom_errorbar(position = position_dodge(width = 0.9), aes(ymin = lower, ymax = upper),width = 0.5) +
+  facet_grid2(cols = vars(condition), axes = "all", switch = "y") +
+  # scale_y_continuous(breaks = seq(2,8,2), limits = c(2,8.5)) +
+  scale_color_manual(values = c("#57b9ff","#375062")) +
+  theme_bw() +
+  plot_theme +
+  theme(panel.margin.y = unit(3, "lines"),
+        panel.margin.x = unit(1, "lines"),
+        legend.position = "bottom")+
+  labs(x = "Trial", y = "Causal Strength", color = "", shape = "") -> p1
+p1
+# ggsave("figures/study3_long_veri_vs_non.png",
+#   plot = p1,
+#   scale = 3,
+#   width = 1200,
+#   height = 400,
+#   units = c("px"),
+#   dpi = 300)
+```
+
+## t tests for veridical vs non veridical
+
+```{r}
+# paired t tests
+cs_subj %>%
+  pivot_wider(names_from = rel_type, values_from = cs_value) %>%
+  group_by(cs_type, condition) %>%
+  summarise(
+    t = t.test(x = veri, y = non_veri, paired = T, alternative = "two.sided")$statistic,
+    t.p.value = round(t.test(x = veri, y = non_veri, paired = T, alternative = "two.sided")$p.value,3),
+    cohen.d = round( (mean(veri) - mean(non_veri)) / sd(veri), 3),
+    V = wilcox.test(x = veri, y = non_veri, paired = T, alternative = "two.sided",exact = F)$statistic,
+    wilcox.p = round(wilcox.test(x = veri, y = non_veri, paired = T, alternative = "two.sided",exact = F)$p.value,3),
+    ttestBF = exp(ttestBF(x = veri, y = non_veri, paired = T)@bayesFactor$bf)
+  ) %>%
+  ungroup() %>%
+  mutate(t.p.adjust = p.adjust(t.p.value, method="BH"),
+         wilcox.p.adjust = p.adjust(wilcox.p, method="BH")) -> cs_subj_paried_t
+cs_subj_paried_t 
+# cs_subj_paried_t %>% write.csv("tables/veri_no_veri_paried_test.csv")
+```
+## regression testing intervening events and causal model
+
+```{r}
+cs_diff$time <- cs_diff$cs_type/6-2
+summary(lmer(diff ~ causal_model*intvn + time + (time|worker_id), data = cs_diff))
+```
+
+```{r}
+# Set Cauchy priors for different parameters
+priors <- c(
+  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
+  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
+  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
+  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
+)
+# Fit the model with specified Cauchy priors
+bayesian_model <- brm(
+  formula = diff ~ causal_model*intvn + time + (time|worker_id),
+  data = cs_diff,
+  family = gaussian(),  # Gaussian family, adjust if needed
+  prior = priors,
+  chains = 4,
+  iter = 2000,
+  cores = 4
+)
+summary(bayesian_model)
+
+# Calculate Bayes factors for each predictor
+bayes_factors <- bayesfactor_parameters(bayesian_model)
+print(bayes_factors)
+```
+
+## regression for verdical and non-veridical separately
+
+Because we found an unexpected effect of the causal model on difference scores, we further tested whether this effect was due to better learning of both veridical and or non-veridical using the same regression that we used for the difference scores
+
+```{r}
+cs_subj$time <- cs_subj$cs_type/6-2
+
+# regression analysis
+summary(lmer(cs_value ~ causal_model*intvn + time + (time|worker_id), data = subset(cs_subj, rel_type == "veri")))
+summary(lmer(cs_value ~ causal_model*intvn + time + (time|worker_id), data = subset(cs_subj, rel_type == "non_veri")))
+
+
+# calculate bayes factor for veridical
+priors <- c(
+  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
+  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
+  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
+  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
+)
+# Fit the model with specified Cauchy priors
+bayesian_model <- brm(
+  formula = cs_value ~ causal_model*intvn + time + (time|worker_id),
+  data = subset(cs_subj, rel_type == "veri"),
+  family = gaussian(),  # Gaussian family, adjust if needed
+  prior = priors,
+  chains = 4,
+  iter = 2000,
+  cores = 4
+)
+summary(bayesian_model)
+
+# Calculate Bayes factors for each predictor
+bayes_factors <- bayesfactor_parameters(bayesian_model)
+print(bayes_factors)
+
+
+# calculate bayes factor for non veridical
+priors <- c(
+  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
+  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
+  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
+  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
+)
+# Fit the model with specified Cauchy priors
+bayesian_model <- brm(
+  formula = cs_value ~ causal_model*intvn + time + (time|worker_id),
+  data = subset(cs_subj, rel_type == "non_veri"),
+  family = gaussian(),  # Gaussian family, adjust if needed
+  prior = priors,
+  chains = 4,
+  iter = 2000,
+  cores = 4
+)
+summary(bayesian_model)
+
+# Calculate Bayes factors for each predictor
+bayes_factors <- bayesfactor_parameters(bayesian_model)
+print(bayes_factors)
+```
+
+
+# ---- Memory Task -----
+
+## recognition memory
+
+### calculating d-prime and test against 0
+
+each participant review 36 old and 18 new pic. 
+```{r}
+load("/Users/YIZ173/Documents/GitHub/delay_intervening_events_studies/Experiment_3/exp3-memory-clean-data.RData")
+
+# calulated d-prime
+epi_part1 %>%
+  mutate(type_code = ifelse(type == "old", 0, 1),
+         hit = ifelse(type_code == 0  & response == 0, 1, 0), # correctly recognize old
+         false_alarm = ifelse(type_code == 1 & response == 0, 1, 0) # mistakenly identify new as old
+         ) %>%
+  group_by(worker_id) %>%
+  summarise(hit_rate = sum(hit)/36,
+            fa_rate = sum(false_alarm)/18,
+            n = n()) %>%
+  mutate(d_prime = hit_rate - fa_rate) -> epi_part1_d_prime
+
+# testing d-prime against 0
+t.test(epi_part1_d_prime$d_prime, mu = 0) # t = 27.35, df = 401, p-value < 2.2e-16
+wilcox.test(epi_part1_d_prime$d_prime, mu = 0) # V = 76290, p-value < 2.2e-16
+ttestBF(epi_part1_d_prime$d_prime, mu = 0) 
+```
+
+### figure
+
+
+```{r fig.height=4, fig.width=4}
+epi_part1_target <- epi_part1_subj %>% subset(target_type == "target")
+epi_part1_target$event_type = factor(epi_part1_target$event_type, labels = c("Images paired w/ causes", "Images paired w/ effects"))
+epi_part1_target$causal_model = factor(epi_part1_target$causal_model, levels = c("3c1e", "1c3e"), label = c("Multiple Causes", "Multiple Effects"))
+
+epi_part1_target %>%
+  group_by(event_type, causal_model) %>%
+  summarise(mean = t.test(mean_acc, mu = 0.5, alternative = "two.sided")$estimate,
+    lower = t.test(mean_acc, mu = 0.5, alternative = "two.sided")$conf.int[1],
+    upper = t.test(mean_acc, mu = 0.5, alternative = "two.sided")$conf.int[2],
+    t = t.test(mean_acc, mu = 0.5, alternative = "two.sided")$statistic,
+    p = t.test(mean_acc, mu = 0.5, alternative = "two.sided")$p.value,
+    wilcox.p = wilcox.test(mean_acc, mu = 0, alternative = "two.sided",exact = F)$p.value,
+    cohen.d = cohen.d(mean_acc, f = NA, na.rm =T)$estimate, 
+    ttestBF = round( exp(ttestBF(mean_acc, mu = 0.5)@bayesFactor$bf), 3)) -> epi_part1_tar_smry
+
+# epi_part1_tar_smry
+
+epi_part1_tar_smry %>%
+ggplot(aes(x = causal_model, y = mean)) +
+  geom_col(position = position_dodge(width = 0.9), fill = "lightblue") +
+  geom_errorbar(position = position_dodge(width = 0.9), aes(ymin = lower, ymax = upper),width = 0.5) +
+  # geom_hline(aes(yintercept = 0.5), alpha = 0.3) +
+  facet_grid2(cols = vars(event_type)) +
+  scale_y_continuous(limits=c(0,1), breaks = seq(0, 1, 0.2)) +
+  theme_bw() +
+  plot_theme +
+  theme(panel.margin.y = unit(3, "lines"),
+        panel.margin.x = unit(1, "lines"),
+        legend.position = "bottom",
+        legend.direction="vertical")+
+  labs(x = "", y = "Recognition Accuracy", color = "", shape = "") -> p.ep1
+p.ep1
+
+# ggsave("figures/study3_recognition_accuracy.png",
+#   plot = p.ep1,
+#   scale = 3,
+#   width = 400,
+#   height = 400,
+#   units = c("px"),
+#   dpi = 300)
+```
+
+### ANOVA: causal_model * event_type 
+
+```{r}
+library(ez)
+# anova_epi1 <- lm(mean_acc ~ event_type * causal_model, data = epi_part1_target)
+ezANOVA(
+  data = epi_part1_target,          
+  dv = mean_acc,                   
+  wid = worker_id,                   
+  within = .(event_type),           
+  between = .(causal_model),        
+  type = 3,                       
+  detailed = TRUE                  # Get detailed output
+)
+
+epi_part1_target$worker_id = factor(epi_part1_target$worker_id)
+bf = anovaBF(mean_acc ~ event_type * causal_model + worker_id, data = epi_part1_target, 
+             whichRandom="worker_id", whichModels="top")
+1/bf
+```
+
+```{r}
+# post-hoc analysis following ANOVA
+epi_part1_target %>%
+  ungroup() %>%
+  select(worker_id, event_type, causal_model, mean_acc) %>%
+  group_by(event_type) %>%
+  summarise(
+    t = t.test(mean_acc~causal_model, alternative = "two.sided")$statistic,
+    t.p.value = t.test(mean_acc~causal_model, alternative = "two.sided")$p.value,
+    cohen.d = round(cohen.d(mean_acc~causal_model, na.rm = TRUE)$estimate,3),
+    V = wilcox.test(mean_acc~causal_model, alternative = "two.sided",exact = F)$statistic,
+    wilcox.p = wilcox.test(mean_acc~causal_model, alternative = "two.sided",exact = F)$p.value,
+    ttestBF = exp(ttestBF(formula = mean_acc~causal_model, data = cur_data())@bayesFactor$bf)
+  ) %>%
+  rename(level = event_type) -> results_event_type
+
+epi_part1_target %>%
+  ungroup() %>%
+  select(worker_id, event_type, causal_model, mean_acc) %>%
+  mutate(event_type = factor(event_type, labels = c("c", "e"))) %>%
+  pivot_wider(names_from = event_type, values_from = mean_acc) %>%
+  group_by(causal_model) %>%
+  summarise(
+    t = t.test(x = c, y = e, paired = T, alternative = "two.sided")$statistic,
+    t.p.value = t.test(x = c, y = e, paired = T, alternative = "two.sided")$p.value,
+    cohen.d = round( (mean(c) - mean(e)) / sd(c), 3),
+    V = wilcox.test(x = c, y = e, paired = T, alternative = "two.sided",exact = F)$statistic,
+    wilcox.p = wilcox.test(x = c, y = e, paired = T, alternative = "two.sided",exact = F)$p.value,
+    ttestBF = exp(ttestBF(x = c, y = e, paired = T, data = cur_data())@bayesFactor$bf)
+  ) %>%
+  rename(level = causal_model) -> results_causal_model
+
+# adjusting p values
+rbind(results_event_type, results_causal_model) %>%
+  mutate(t.p.adjust = p.adjust(t.p.value, method="BH"),
+         wilcox.p.adjust = p.adjust(wilcox.p, method="BH")) #%>%
+  
+#write.csv("tables/recogntion_anova_post-hoc_analysis.csv")
+```
+
+
+## Episodic Memory
+```{r}
+# subject-level episodic memory against the chance level
+t.test(epi_part2_subj$mean_acc, mu = 0.5) 
+wilcox.test(epi_part2_subj$mean_acc, mu = 0.5) 
+ttestBF(epi_part2_subj$mean_acc, mu = 0.5) 
+```
+
+```{r fig.height=4, fig.width=4}
+
+# vidualization
+
+epi_part2_target <- epi_part2_subj %>% subset(target_type == "target") 
+epi_part2_target$event_type = factor(epi_part2_target$event_type, labels = c("Images paired w/ causes", "Images paired w/ effects"))
+epi_part2_target$causal_model = factor(epi_part2_target$causal_model, levels = c("3c1e", "1c3e"), label = c("Multiple Causes", "Multiple Effects"))
+epi_part2_target %>%
+  group_by(event_type, causal_model) %>%
+  summarise(mean = t.test(mean_acc, mu = 0.5, alternative = "two.sided")$estimate,
+    lower = t.test(mean_acc, mu = 0.5, alternative = "two.sided")$conf.int[1],
+    upper = t.test(mean_acc, mu = 0.5, alternative = "two.sided")$conf.int[2],
+    t = t.test(mean_acc, mu = 0.5, alternative = "two.sided")$statistic,
+    p = t.test(mean_acc, mu = 0.5, alternative = "two.sided")$p.value,
+    wilcox.p = wilcox.test(mean_acc, mu = 0, alternative = "two.sided",exact = F)$p.value,
+    cohen.d = cohen.d(mean_acc, f = NA, na.rm =T)$estimate, 
+    ttestBF = round( exp(ttestBF(mean_acc, mu = 0.5)@bayesFactor$bf), 3)) -> epi_part2_tar_smry
+
+# epi_part2_tar_smry
+
+epi_part2_tar_smry %>%
+ggplot(aes(x = causal_model, y = mean)) +
+  geom_col(position = position_dodge(width = 0.9), fill = "lightblue") +
+  geom_hline(aes(yintercept = 0.5), alpha = 0.3) +
+  geom_errorbar(position = position_dodge(width = 0.9), aes(ymin = lower, ymax = upper),width = 0.5) +
+  facet_grid2(cols = vars(event_type)) +
+  theme_bw() +
+  scale_y_continuous(limits=c(0,1), breaks = seq(0, 1, 0.2)) +
+  plot_theme +
+  theme(panel.margin.y = unit(3, "lines"),
+        panel.margin.x = unit(1, "lines"),
+        legend.position = "bottom",
+        legend.direction="vertical")+
+  labs(x = "", y = "Associative Memory Accuracy", color = "", shape = "") -> p.ep2
+p.ep2
+
+# ggsave("figures/study3_associative_accuracy.png",
+#   plot = p.ep2,
+#   scale = 3,
+#   width = 400,
+#   height = 400,
+#   units = c("px"),
+#   dpi = 300)
+
+```
+
+```{r}
+# ANOVA
+library(ez)
+# anova_epi1 <- lm(mean_acc ~ event_type * causal_model, data = epi_part1_target)
+ezANOVA(
+  data = epi_part2_target,          
+  dv = mean_acc,                   
+  wid = worker_id,                   
+  within = .(event_type),           
+  between = .(causal_model),        
+  type = 3,                       
+  detailed = TRUE                  # Get detailed output
+)
+
+epi_part2_target$worker_id = factor(epi_part2_target$worker_id)
+bf = anovaBF(mean_acc ~ event_type * causal_model + worker_id, data = epi_part2_target, 
+             whichRandom="worker_id", whichModels="top")
+1/bf
+```
+
+
