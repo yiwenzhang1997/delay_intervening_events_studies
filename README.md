@@ -4,9 +4,9 @@
 ## Preregisrations
 - Exp. 1a was not preregistered
 - [Exp. 1b](http://osf.io/yde9v)
-- [Exp. 2a](https://osf.io/xdyrm)
+- [Exp. 2a](https://osf.io/xdyrm)  I am worried about if this is the right registration or not
 - [Exp. 2b](https://osf.io/q6upm)
-- [Exp. 3](https://osf.io/q9mpt)
+- [Exp. 3](https://osf.io/q9mpt)   We might decide to remove this if we cut this study
 
 ## Supplementary Online Results
 to be added
