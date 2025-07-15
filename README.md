@@ -4,7 +4,7 @@
 ## Preregistrations
 - Exp. 1a was not preregistered
 - [Exp. 1b](http://osf.io/yde9v)
--  I am worried about if this is the right registration or not. It seems that this is the updated one (https://osf.io/3jbdp), but we are still figuring this out
+- [Exp. 2a)(https://osf.io/3jbdp)
 - [Exp. 2b](https://osf.io/q6upm)
 
 ## Other Notes about Preregistrations for Full Transparency
