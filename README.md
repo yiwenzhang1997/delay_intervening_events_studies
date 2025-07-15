@@ -4,7 +4,7 @@
 ## Preregistrations
 - Exp. 1a was not preregistered
 - [Exp. 1b](http://osf.io/yde9v)
-- [Exp. 2a)(https://osf.io/3jbdp)
+- [Exp. 2a](https://osf.io/3jbdp)
 - [Exp. 2b](https://osf.io/q6upm)
 
 ## Other Notes about Preregistrations for Full Transparency
