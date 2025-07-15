@@ -8,20 +8,24 @@
 - [Exp. 2b](https://osf.io/q6upm)
 
 ## Detailed Notes about Deviations from Preregistrations
+### General Comments
+ - In the preregistrations we did not explain how we would handle multiple comparisons. For all the studies we used the Benjamini-Hochberg procedure to control for the false discovery rate. Raw p-values are also available in Online Supplement 1. 
+ - Fourth, for all experiments, we conducted both parametric and non-parametric versions of the analyses. We pre-registered in Experiment 1b, 2a and 2b that we would run non-parametric tests to test the influence of delays and intervening events. However, it turned out the results were very similar in both parametric and non-parametric tests. To keep it consistent with other regression analysis and Bayesian analysis which both are parametric, we decided to report the p values from the parametric results in the main text and put all non-parametric results Online Supplement 1.
+ - The comparisons between the short vs. long timeframe (Exp. 1a 1b, and Exp 2a vs. 2b) were not preregistered.
+
 ### Exp. 1a
 This experiment was not preregistered
 ### Exp. 1b
-
-
+ - Participants were also asked to select which cause they saw at 9 AM, 11 AM, and 1 PM. This question was designed as an attention check as we thought it would be easy. However, it became apparent that this question was very hard for participants, and we did not use it as an attention check.
+ - In the preregistration, we intended to analyze the veridical and non-veridical relationships separately. However, we decided to use difference scores to capture participants’ ability to discriminate between veridical and non-veridical relations, which cut down the number of analyses in half. ARE THE SEPARATE ANALYSES SOMEWHERE ON GITHUB?
+ - The registration also mentioned an analysis of variability of delay. I think that this is not very useful given that we did not find an effect of delay or intervening events, but did you do this or not? We should make some statement about it one way or the other. NEED TO ADD COMMENT.
 ### Exp. 2a
-
-
+ - In the preregistration we said that we would use difference (veridical minus non-veridical) scores because we had not realized that we had to analyze them separately at that time.
+ - Related to the prior point, for the test of successful learning, the analysis was changed to test the judgments against 0 instead of comparing the veridical vs. nonveridical judgments.
+ - The comparison among the three conditions was not preregistered.
 ### Exp. 2b
-
-
-
-### Comparing the short vs. long timeframe (Exp. 1a 1b, and Exp 2a vs. 2b)
-These comparisons were not registered.
+ - The comparison among the three conditions was not preregistered.
+ - ANY OF THE SAME THINGS FROM 2A BELONG HERE AS WELL - NEED TO CHECK
 
 
 ## Other studies that were run on this line of research but not reported in this manuscript
