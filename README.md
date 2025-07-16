@@ -19,6 +19,7 @@ This experiment was not preregistered
 ### [Registration for Exp. 2b](https://osf.io/q6upm)
  - The comparison among the three conditions was not preregistered.
  - ANY OF THE SAME THINGS FROM 2A BELONG HERE AS WELL - NEED TO CHECK
+ - We preregistered that we would run Wilcoxon tests to compare delays of 1 vs. 3, 3 vs. 9, and 9 vs. 11 timesteps at each time point, but we decided to report Spearman correlations instead to cut down the number of tests. The Wilcoxon tests are available in Online Supplement 1. None of the 48 tests were significant after adjusting for multiple comparisons.
 
 
 ## Other studies that were run on this line of research but not reported in this manuscript
