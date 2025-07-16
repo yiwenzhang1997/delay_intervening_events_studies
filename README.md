@@ -16,6 +16,7 @@ This experiment was not preregistered
  - In the preregistration we said that we would use difference (veridical minus non-veridical) scores because we had not realized that we had to analyze them separately at that time.
  - Related to the prior point, for the test of successful learning, the analysis was changed to test the judgments against 0 instead of comparing the veridical vs. nonveridical judgments.
  - The comparison among the three conditions was not preregistered.
+ - For the analysis of the impact of delay, we said that we would first calculate the actual average delay rather than the delays calculated from the order events (delays of 1, 3, 9, or 11 events). Because we said that we would run Spearman correlations, only taking the ordinal reltions between these events would result in the same analysis either way.
 ### [Registration for Exp. 2b](https://osf.io/q6upm)
  - The comparison among the three conditions was not preregistered.
  - ANY OF THE SAME THINGS FROM 2A BELONG HERE AS WELL - NEED TO CHECK
