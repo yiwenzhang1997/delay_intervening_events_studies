@@ -11,6 +11,7 @@ library(tidyverse)
 library(BayesFactor)
 library(lmerTest)
 library(ggsignif)
+library(ggh4x)
 
 plot_theme <- theme(
   panel.margin.y = unit(2, "lines"),
@@ -71,8 +72,47 @@ rel_type_test$dataset = factor(rel_type_test$dataset, label = c("Contingency = 0
 rel_type_test
 ```
 
+# Figure of Exp 1a Veridical vs NonVeridical
 
-# Figure of Exp 1a difference score
+```{r}
+study0.short1 %>% 
+  group_by(dataset, task_id, rel_type, intvn, cause_num) %>%
+  summarise(cs_value = mean(causal_strength)) %>%
+  group_by(dataset, rel_type, cause_num, intvn) %>%
+  summarise(
+    mean = t.test(cs_value, mu = 0, alternative = "two.sided")$estimate,
+    lower = t.test(cs_value, mu = 0, alternative = "two.sided")$conf.int[1],
+    upper = t.test(cs_value, mu = 0, alternative = "two.sided")$conf.int[2]
+    ) -> rel_type_bycond_smry
+
+rel_type_bycond_smry$rel_type = factor(rel_type_bycond_smry$rel_type, levels = c("veridical", "nonVeridical"), label = c("Veridical", "Non Veridical"))
+
+rel_type_bycond_smry$dataset = factor(rel_type_bycond_smry$dataset, label = c("\u0394P = 0.83", "\u0394P = 0.67", "\u0394P = 0.50"))
+
+rel_type_bycond_smry %>%
+    mutate(cause_name = ifelse(intvn > 0 , paste0(toupper(cause_num), "\n(",intvn, " ICs)"), paste0(toupper(cause_num), "\n(",intvn, " IC)"))) %>%
+  ggplot(aes(x = factor(intvn), y = mean, color = rel_type, group = rel_type)) +
+  geom_point(position = position_dodge(width = 0.5)) +
+  geom_errorbar(position = position_dodge(width = 0.5), aes(ymin = lower, ymax = upper), width = 0.3) +
+  theme_bw() +
+  plot_theme +
+  scale_color_manual(values = c("lightblue","#1E5162")) +
+  theme(legend.position = "bottom") +
+    ylim(0,10) +
+  facet_grid2(~dataset, scales = "free") +
+  labs(x = "# of Intervening Causes", y = "Causal Strength", color = "") -> p0
+ p0
+# ggsave("../figures/study1_short_veriVSNonveri_delayIntervene.png",
+#   plot = p0,
+#   scale = 3,
+#   width = 500,
+#   height = 300,
+#   units = c("px"),
+#   dpi = 300)
+
+```
+
+# Figure of Exp 1a difference score (not in the manuscript)
 
 ```{r fig.height=3, fig.width=8}
 study0.short.diff.subj %>%

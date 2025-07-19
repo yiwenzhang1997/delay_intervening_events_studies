@@ -125,23 +125,36 @@ mutate(p_adjust = p.adjust(p_value, method="BH"))
 ## Figure for the impact of intervening events
 
 
-```{r fig.height=2, fig.width=6}
+```{r fig.height=4, fig.width=6}
 
-diff_smry %>%
-  mutate(cause_name = ifelse(intvn > 0 , paste0(toupper(cause), "\n(",intvn, " ICs)"), paste0(toupper(cause), "\n(",intvn, " IC)"))) %>%
-  subset(delay %in% c('4', '6', '8')) %>%
+study0.long %>% 
+  group_by(condition, task_id, rel_type, intvn, cause, delay) %>%
+    summarise(cs_value = mean(causal_strength)) %>% # get subject level mean
+    group_by(condition, rel_type, intvn, cause, delay) %>%
+  summarise(
+    mean = t.test(cs_value, mu = 0, alternative = "two.sided")$estimate,
+    lower = t.test(cs_value, mu = 0, alternative = "two.sided")$conf.int[1],
+    upper = t.test(cs_value, mu = 0, alternative = "two.sided")$conf.int[2],
+    ) -> rel_type_bycond_smry
+
+rel_type_bycond_smry$rel_type = factor(rel_type_bycond_smry$rel_type, levels = c("veridical", "nonVeridical"), label = c("Veridical", "Non Veridical"))
+
+rel_type_bycond_smry %>%
+    mutate(cause_name = ifelse(intvn > 0 , paste0(toupper(cause), "\n(",intvn, " ICs)"), paste0(toupper(cause), "\n(",intvn, " IC)"))) %>%
+    subset(delay %in% c('4', '6', '8')) %>%
     mutate(delay_name = paste("Delay =", delay, "hours")) %>%
-  ggplot(aes(x = factor(intvn), y = mean, group = factor(intvn))) +
-  geom_col(position=position_dodge(width=0.3), fill = "lightgrey") +
-  geom_errorbar(position=position_dodge(width=0.3), aes(ymin = lower, ymax = upper), width = 0.3) +
-  facet_wrap(~delay_name, scales = "free") +
-  labs(y = "Difference Score", x="# of Intervening Causes") +
+  ggplot(aes(x = factor(intvn), y = mean, color = rel_type, group = rel_type)) +
+  geom_point(position = position_dodge(width = 0.5)) +
+  geom_errorbar(position = position_dodge(width = 0.5), aes(ymin = lower, ymax = upper), width = 0.3) +
   theme_bw() +
   plot_theme +
-    ylim(-2,2) +
-theme(legend.position = "none") -> p1
+  scale_color_manual(values = c("lightblue","#1E5162")) +
+  theme(legend.position = "bottom") +
+    ylim(0,10) +
+  facet_grid2(~delay_name, scales = "free") +
+  labs(x = "# of Intervening Causes", y = "Causal Strength", color = "") -> p1.1
 
-p1
+p1.1
 
 # ggsave("../figures/study1_long_diff_score_intvn.png",
 #   plot = p1,
@@ -154,28 +167,23 @@ p1
 
 ## Figure for the impact of delays
 
-```{r fig.height=2, fig.width=6}
+```{r fig.height=4, fig.width=6}
 
-diff_smry %>%
-  mutate(intvn_name = ifelse(intvn > 0, paste(intvn,"Intervening Causes"), paste(intvn,"Intervening Cause"))) %>%
-ggplot(aes(x = factor(delay), y = mean, group = delay)) +
-  geom_col(position=position_dodge(width=0.3), fill = "lightgrey") +
-  geom_errorbar(position=position_dodge(width=0.3), aes(ymin = lower, ymax = upper), width = 0.3) +
-  facet_grid2(~intvn_name, scales = "free") +
-  labs(y = "Difference Score", x="Delay (hours)") +
+rel_type_bycond_smry %>%
+    mutate(intvn_name = ifelse(intvn > 1, paste(intvn,"ICs"), paste(intvn,"IC"))) %>%
+  ggplot(aes(x = factor(delay), y = mean, color = rel_type, group = rel_type)) +
+  geom_point(position = position_dodge(width = 0.5)) +
+  geom_errorbar(position = position_dodge(width = 0.5), aes(ymin = lower, ymax = upper), width = 0.3) +
   theme_bw() +
   plot_theme +
-    ylim(-2,2) +
-theme(legend.position = "none") -> p2
-p2
+  scale_color_manual(values = c("lightblue","#1E5162")) +
+  theme(legend.position = "bottom") +
+    ylim(0,10) +
+  facet_grid2(~intvn_name, scales = "free") +
+  labs(x = "Delay (hours)", y = "Causal Strength", color = "") -> p2.1
 
-# ggsave("../figures/study1_long_diff_score_delay.png",
-#   plot = p2,
-#   scale = 3,
-#   width = 800,
-#   height = 300,
-#   units = c("px"),
-#   dpi = 300)
+p2.1
+
 ```
 
 # Compare Exp 1a and 1b

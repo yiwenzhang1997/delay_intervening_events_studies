@@ -138,17 +138,17 @@ veri_against_0_results_bind %>%
   geom_line(linetype="dashed", position = position_dodge(width = 0.5)) +
   geom_point(position = position_dodge(width = 0.5), size = 3) +
   geom_errorbar(position = position_dodge(width = 0.5), aes(ymin = lower, ymax = upper),width = 0.5) +
-  facet_grid2(rows = vars(exp), cols = vars(condition), axes = "all", switch = "y") +
-  scale_y_continuous(breaks = seq(-1,3,1), limits = c(-1,3)) +
+  facet_grid2(rows = vars(exp), cols = vars(condition), axes = "x", switch = "y") +
+  scale_y_continuous(breaks = seq(-1,4,1), limits = c(-0.3,4.3)) +
+  scale_color_manual(values = c("black","#162a33")) +
   theme_bw() +
   plot_theme +
-  theme(panel.margin.y = unit(3, "lines"),
-        panel.margin.x = unit(1, "lines"),
+  theme(
         legend.position = "none",
         legend.direction="vertical")+
   labs(x = "Trial", y = "Causal Strength", color = "", shape = "") +
   geom_text(aes(label = ifelse(t.p.adjust < 0.001, "***", ifelse( t.p.adjust < 0.01, "**", ifelse(t.p.adjust < 0.05, "*", "")))),
-    y = 2.5, vjust=0, size = 5)-> p1
+    y = 4, vjust=0, size = 5)-> p1
 p1
 # ggsave(plot = p1, filename = "figures/Study 2 veridical causal against 0.png",
 #        scale = 3,
@@ -167,14 +167,13 @@ veri_against_0_results_bind %>%
   geom_line(position = position_dodge(width = 0.5), linetype = "dashed") + 
   geom_point(position = position_dodge(width = 0.5), size = 3) +
   geom_errorbar(position = position_dodge(width = 0.5), aes(ymin = lower, ymax = upper), width = 0.5) +
-  facet_grid2(rows = vars(exp), cols = vars(condition), axes = "all", switch = "y") +
+  facet_grid2(rows = vars(exp), cols = vars(condition), axes = "x", switch = "y") +
   ylab("Predictive Strength") +
   labs(x = "Trial", y = "Predictive Strength", color = "", shape = "") +
-  ylim(-0.5,4.5) +
+  scale_y_continuous(breaks = seq(-1,4,1), limits = c(-0.3,4.3)) +
   theme_bw() +
   plot_theme  +
-  theme(panel.margin.y = unit(3, "lines"),
-        panel.margin.x = unit(1, "lines"),
+  theme(
         legend.position = "bottom",
         legend.direction="vertical") +
   geom_text(aes(label = ifelse(t.p.adjust < 0.001, "***", ifelse(t.p.adjust < 0.01, "**", ifelse(t.p.adjust < 0.05, "*", "")))),
