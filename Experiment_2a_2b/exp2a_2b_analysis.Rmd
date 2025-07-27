@@ -18,8 +18,6 @@ library(Hmisc) # for
 library(BayesFactor)
 library(brms)
 library(bayestestR)
-
-# source("")
 ```
 
 
@@ -209,7 +207,7 @@ cs_df.short %>%
 
 # condition for exp 2b
 conditions.long <- 
-  data.frame(condition_index = c(1,1,2,2,3,3,4,4),
+  data.frame(condition_index = factor(c(1,1,2,2,3,3,4,4)),
              cause_order = c("c1", "c3", "c1", "c3", "c1", "c3", "c1", "c3"),
              # effect_order = c("e1","e3","e1","e3","e1","e3"),
              delay = c(3, 1, 9, 3, 11, 9, 0, 0),
@@ -486,28 +484,6 @@ rel_type_smry %>%
   theme(legend.position = "left")+
   labs(x = "trial", y = "Causal Strength", color = "Condition")-> p1
 p1
-
-
-pred_p_df %>%
-  group_by(exp, condition_index, half) %>%
-  summarise(
-    mean = t.test(pred_strength, mu = 0, alternative = "two.sided")$estimate,
-    lower = t.test(pred_strength, mu = 0, alternative = "two.sided")$conf.int[1],
-    upper = t.test(pred_strength, mu = 0, alternative = "two.sided")$conf.int[2],
-    t.p.value = round(t.test(pred_strength, mu = 0, alternative = "two.sided")$p.value,3),
-    cohen.d = round(cohen.d(pred_strength, f=NA, mu = 0,na.rm =T)$estimate,3),
-    wilcox.p = round(wilcox.test(pred_strength, mu = 0, alternative = "two.sided",exact = F)$p.value,3),
-    BF =exp(ttestBF(pred_strength, mu = 0)@bayesFactor$bf)) %>%
-  ggplot(aes(x = factor(half), y = mean, fill = factor(condition_index), group = factor(condition_index))) +
-  geom_hline(yintercept = 0, alpha = 0.5) +
-  geom_col(position = position_dodge(width = 0.9)) + 
-  # geom_point(position = position_dodge(width = 0.5)) +
-  geom_errorbar(position = position_dodge(width = 0.9), aes(ymin = lower, ymax = upper) , width = 0.3) +
-  facet_grid(.~exp, switch="y") +
-  theme_bw() +
-  plot_theme +
-  # ylim(-4,4) +
-  labs(x = "Trial", y = "Predictive Strength", fill = "Condition")
 ```
 
 
@@ -525,18 +501,22 @@ contrasts(veri_df.short$condition_index) <- contr.treatment(3, base = 2)
 contrasts(veri_df.short$condition_index)
 model <- lmer(causal_strength ~ time * condition_index + (1+time|worker_id), data = veri_df.short)
 summary(model)
-# Get estimated marginal means for each group at each time point
-emm <- emmeans(model, ~ condition_index | time)
-# Pairwise comparisons for each time point
-contrast_results <- pairs(emm)
-print(contrast_results)
 
-car::linearHypothesis(model, "condition_index1 - condition_index3 = 0")
+# compare 1 vs 3
+car::linearHypothesis(model, "condition_index1 - condition_index3 = 0") # p = 0.2951
+car::linearHypothesis(model, "time:condition_index1 - time:condition_index3 = 0") # p = 0.5583
+
+# change the reference and run the model again
+contrasts(veri_df.short$condition_index) <- contr.treatment(3, base = 1)
+contrasts(veri_df.short$condition_index)
+model <- lmer(causal_strength ~ time * condition_index + (1+time|worker_id), data = veri_df.short)
+summary(model)
 ```
 
 
 
 ```{r}
+set.seed(1997)
 # get Bayes Factor
 # Define the model formula
 formula <- bf(causal_strength ~ condition_index * time + (time| worker_id))
@@ -556,14 +536,28 @@ bayesian_model <- brm(
   prior = priors,
   chains = 4,
   iter = 2000,
-  cores = 4
+  cores = 4,
+  sample_prior = TRUE
 )
 summary(bayesian_model)
 
 # Calculate Bayes factors for each predictor
 bayes_factors <- bayesfactor_parameters(bayesian_model)
 print(bayes_factors)
+
+
 ```
+```{r}
+print(hypothesis(bayesian_model, "condition_index1 - condition_index3 < 0"))
+print(hypothesis(bayesian_model, "condition_index1:time - condition_index3:time < 0"))
+# https://rpubs.com/lindeloev/bayes_factors
+hypothesis(bayesian_model, "condition_index1 - condition_index3 = 0")
+```
+
+```{r}
+print(hypothesis(bayesian_model, "condition_index1 = 0"))
+```
+
 
 
 #### predictive strength
@@ -577,21 +571,25 @@ time_mapping <- c(
 )
 
 pred_p_df.short$time <- scale(time_mapping[pred_p_df.short$half])
-pred_p_df.short$condition_index <- factor(pred_p_df.short$condition_index)
+pred_p_df.short$condition_index <- factor(pred_p_df.short$condition_index, levels = c('1','2','3'))
 contrasts(pred_p_df.short$condition_index) <- contr.treatment(3, base = 2)
 contrasts(pred_p_df.short$condition_index)
 model <- lmer(pred_strength ~ condition_index * time + (time|task_id), data = pred_p_df.short)
 summary(model)
-# Get estimated marginal means for each group at each time point
-emm <- emmeans(model, ~ condition_index | time)
-# Pairwise comparisons for each time point
-contrast_results <- pairs(emm)
-print(contrast_results)
 
+car::linearHypothesis(model, "condition_index1 - condition_index3 = 0")
+car::linearHypothesis(model, "condition_index1:time - condition_index3:time = 0")
+
+# # Change reference
+# contrasts(pred_p_df.short$condition_index) <- contr.treatment(3, base = 1)
+# contrasts(pred_p_df.short$condition_index)
+# model2 <- lmer(pred_strength ~ condition_index * time + (time|task_id), data = pred_p_df.short)
+# summary(model2)
 ```
 
 
 ```{r}
+set.seed(1997)
 # Bayes Factor
 formula <- bf(pred_strength ~ condition_index * time + (time | task_id))
 
@@ -608,7 +606,7 @@ bayesian_model <- brm(
   data = pred_p_df.short,
   family = gaussian(),  # Gaussian family, adjust if needed
   prior = priors,
-  sample_prior = "yes",
+  sample_prior = TRUE,
   chains = 4,
   iter = 2000,
   cores = 4
@@ -618,10 +616,6 @@ summary(bayesian_model)
 # Calculate Bayes factors for each predictor
 bayes_factors <- bayesfactor_parameters(bayesian_model)
 print(bayes_factors)
-
-emm <- emmeans(bayesian_model,  ~ condition_index | time)
-pairwise_results <- pairs(emm)
-print(pairwise_results)
 ```
 
 ### exp 2b
@@ -663,14 +657,15 @@ bayesian_model <- brm(
   prior = priors,
   chains = 4,
   iter = 2000,
-  cores = 4
+  cores = 4,
+  sample_prior = TRUE
 )
 summary(bayesian_model)
 
 # Calculate Bayes factors for each predictor
 bayes_factors <- bayesfactor_parameters(bayesian_model)
 print(bayes_factors)
-
+hypothesis(bayesian_model, "condition_index1 - condition_index4 = 0")
 
 ```
 
