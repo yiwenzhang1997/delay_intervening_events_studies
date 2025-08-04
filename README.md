@@ -28,7 +28,7 @@
 - We also ran another study about how intervening events may differ when learning about common effect structures (3 causes and 1 effect) vs. common cause structures (1 cause and 3 effects). The findings from this study agree with the studies we reported in that no impact of the number of intervening events was found. Furthermore, as explained in the general discussion, this study circumvents one of the challenges of Exp. 2a due to the Long ISI condition. However, because the main motivations and findings are about the role of causal structure, this study ended up being too far away from the other studies that were included in the manuscript. The various parts of this study are available as follows:
    -  Here is the registration: (https://osf.io/q9mpt)
    -  The results are reported here: Zhang, Y. (2025). [The Roles of Delays and Intervening Events in Causal Learning](https://pitt.idm.oclc.org/login?url=https://www.proquest.com/dissertations-theses/roles-delays-intervening-events-causal-learning/docview/3201334141/se-2) (Order No. 31848591). Available from Dissertations & Theses @ University of Pittsburgh; ProQuest Dissertations & Theses Global. (3201334141). 
-   -  data and code: YIWEN ADD IN LINK TO SEPARATE GITHUB REGISTRY*****
+   -  data and code: [Github Repository](https://github.com/yiwenzhang1997/dissertation-experiemnt3-analysis-public.git)
 
 
 ## Acknowledgements
