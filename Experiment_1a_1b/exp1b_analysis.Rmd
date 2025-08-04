@@ -364,7 +364,8 @@ final_results %>% arrange(intvn, comparison)
 
 ```{r fig.height=3, fig.width=8}
 study0.long %>%
-  subset(rel_type == "veridical") -> veri_df.long
+  subset(rel_type == "veridical") %>%
+  select(task_id, delay, intvn, condition_index, causal_strength)-> veri_df.long
 
 
 veri_df.long$delay = factor(veri_df.long$delay)
@@ -401,6 +402,19 @@ theme(legend.position = "none")
 ```
 
 ```{r}
+# spearman comparison
+veri_df.long %>%
+    subset(delay %in% c('4','6','8')) %>%
+  mutate(intvn = as.numeric(intvn)) %>%
+  group_by(delay) %>%
+  summarise(
+    spearman_rho = cor(intvn, causal_strength, method = "spearman"),
+    p_value = cor.test(intvn, causal_strength, method = "spearman")$p.value,
+    bayes_factor = exp(correlationBF(rank(intvn), rank(causal_strength))@bayesFactor$bf)
+  ) %>%
+mutate(p_adjust = p.adjust(p_value, method="BH"))
+
+# t tests
 veri_df.long %>%
   subset(delay == '6' & intvn %in% c('0', '1')) %>%
 mutate(intvn = factor(intvn)) %>%
@@ -455,6 +469,19 @@ theme(legend.position = "none") +
 ```
 
 ```{r}
+# spearman comparison
+veri_df.long %>%
+  mutate(delay = as.numeric(delay)) %>%
+  group_by(intvn) %>%
+  summarise(
+    spearman_rho = cor(delay, causal_strength, method = "spearman"),
+    p_value = cor.test(delay, causal_strength, method = "spearman")$p.value,
+    bayes_factor = exp(correlationBF(rank(delay), rank(causal_strength))@bayesFactor$bf)
+  ) -> delay_spearman
+delay_spearman %>%
+mutate(p_adjust = p.adjust(p_value, method="BH"))
+
+# t tests
 veri_df.long %>%
   subset(intvn == '0' & delay %in% c('2', '4')) %>%
 mutate(delay = factor(delay)) %>%
@@ -577,21 +604,21 @@ theme(legend.position = "none") +
   scale_color_hue(h = c(180, 300)) 
 ```
 
-```{r}
-t.test(cs ~ intvn, alternative = "two.sided", data = subset(nonVeri_df.long, delay == '6' & intvn %in% c('0', '1')))
-
-nonVeri_df.long %>%
-  subset(delay == '6' & intvn %in% c('0', '1')) %>%
-  group_by(delay) %>%
-  dplyr::summarise(t.p.value = t.test(cs ~ intvn, alternative = "two.sided", data = .)$p.value,
-            wilcox = wilcox.test(cs ~ intvn, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95, data = .)$p.value,
-            cohen.d = cohen.d(cs ~ intvn, na.rm =T, data = .)$estimate,
-            BF =round(exp(ttestBF(formula = cs ~ intvn, data = .)@bayesFactor$bf),3)) %>%
-  mutate(comparison = "0 vs 1 event", delay = "6 hrs", exp="exp1b")
-```
 ### the influence of intervening events
 
 ```{r}
+# spearman comparison
+nonVeri_df.long %>%
+  mutate(delay = as.numeric(delay)) %>%
+  group_by(intvn) %>%
+  summarise(
+    spearman_rho = cor(delay, cs, method = "spearman"),
+    p_value = cor.test(delay, cs, method = "spearman")$p.value,
+    bayes_factor = exp(correlationBF(rank(delay), rank(cs))@bayesFactor$bf)
+  ) -> delay_spearman
+delay_spearman %>%
+mutate(p_adjust = p.adjust(p_value, method="BH"))
+
 nonVeri_df.long %>%
   subset(delay == '6' & intvn %in% c('0', '1')) %>%
   mutate(intvn = factor(intvn)) %>%
@@ -630,6 +657,19 @@ rbind(intvn_0vs1.long.nonVeri,
 ```
 
 ```{r}
+# spearman comparison
+nonVeri_df.long %>%
+    subset(delay %in% c('4','6','8')) %>%
+  mutate(intvn = as.numeric(intvn)) %>%
+  group_by(delay) %>%
+  summarise(
+    spearman_rho = cor(intvn, cs, method = "spearman"),
+    p_value = cor.test(intvn, cs, method = "spearman")$p.value,
+    bayes_factor = exp(correlationBF(rank(intvn), rank(cs))@bayesFactor$bf)
+  ) %>%
+mutate(p_adjust = p.adjust(p_value, method="BH"))
+
+# t test
 nonVeri_df.long %>%
   subset(intvn == '0' & delay %in% c('2', '4')) %>%
 mutate(delay = factor(delay)) %>%
