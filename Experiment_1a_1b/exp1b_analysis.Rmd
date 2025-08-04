@@ -358,15 +358,9 @@ final_results %>% arrange(intvn, comparison)
 
 
 
-## Testing for Veridical rating only
+## Testing for Veridical ratings only
 
-### the influence of ic
-```{r}
-study0.long %>%
-    subset(rel_type == "veridical") %>%
-    group_by(condition_index, delay) %>%
-    summarise(n = n())
-```
+### the influence of intervening events
 
 ```{r fig.height=3, fig.width=8}
 study0.long %>%
@@ -414,7 +408,7 @@ mutate(intvn = factor(intvn)) %>%
             wilcox = wilcox.test(causal_strength ~ intvn, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
             cohen.d = cohen.d(causal_strength ~ intvn, na.rm =T)$estimate,
             BF =round(exp(ttestBF(formula = causal_strength ~ intvn, data = cur_data())@bayesFactor$bf),3)) %>%
-  mutate(comparison = "0 vs 1 event", delay = "6 hrs", exp="long")-> intvn_0vs1.long
+  mutate(comparison = "0 vs 1 event", delay = "6 hrs", exp="exp1b")-> intvn_0vs1.long
 
 veri_df.long %>%
   subset(delay == '6' & intvn %in% c('1', '2')) %>%
@@ -424,7 +418,7 @@ veri_df.long %>%
             cohen.d = cohen.d(causal_strength ~ intvn,na.rm =T)$estimate,
             BF =round(exp(ttestBF(formula = causal_strength ~ intvn, data = cur_data())@bayesFactor$bf),3)
             ) %>%
-  mutate(comparison = "1 vs 2 events", delay = "6 hrs", exp="long")-> intvn_1vs2.long
+  mutate(comparison = "1 vs 2 events", delay = "6 hrs", exp="exp1b")-> intvn_1vs2.long
 
 veri_df.long %>%
   subset(delay == '6' & intvn %in% c('0', '2')) %>%
@@ -433,7 +427,7 @@ veri_df.long %>%
             wilcox = wilcox.test(causal_strength ~ intvn, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
             cohen.d = cohen.d(causal_strength ~ intvn,na.rm =T)$estimate,
             BF =round(exp(ttestBF(formula = causal_strength ~ intvn, data = cur_data())@bayesFactor$bf),3)) %>%
-  mutate(comparison = "0 vs 2 eventx", delay = "6 hrs", exp="long")-> intvn_0vs2.long
+  mutate(comparison = "0 vs 2 events", delay = "6 hrs", exp="exp1b")-> intvn_0vs2.long
 
 rbind(intvn_0vs1.long,
       intvn_1vs2.long,
@@ -442,7 +436,7 @@ rbind(intvn_0vs1.long,
 ```
 
 
-### influence of delay
+### the influence of delay
 
 ```{r fig.height=3, fig.width=8, paged.print=FALSE}
 veri_df_smry %>%
@@ -468,7 +462,7 @@ mutate(delay = factor(delay)) %>%
             wilcox = wilcox.test(causal_strength ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
             cohen.d = cohen.d(causal_strength ~ delay, na.rm =T)$estimate,
             BF =round(exp(ttestBF(formula = causal_strength ~ delay, data = cur_data())@bayesFactor$bf),3)) %>%
-  mutate(comparison = "2 vs 4", intvn = 0, exp="long")-> delay_2vs4_0e.long
+  mutate(comparison = "2 vs 4", intvn = 0, exp="exp1b")-> delay_2vs4_0e.long
 
 veri_df.long %>%
   subset(intvn == '0' & delay %in% c('4', '6')) %>%
@@ -477,7 +471,7 @@ mutate(delay = factor(delay)) %>%
             wilcox = wilcox.test(causal_strength ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
             cohen.d = cohen.d(causal_strength ~ delay, na.rm =T)$estimate,
             BF =round(exp(ttestBF(formula = causal_strength ~ delay, data = cur_data())@bayesFactor$bf),3)) %>%
-  mutate(comparison = "4 vs 6", intvn = 0, exp="long")-> delay_4vs6_0e.long
+  mutate(comparison = "4 vs 6", intvn = 0, exp="exp1b")-> delay_4vs6_0e.long
 
 veri_df.long %>%
   subset(intvn == '1' & delay %in% c('4', '6')) %>%
@@ -486,7 +480,7 @@ mutate(delay = factor(delay)) %>%
             wilcox = wilcox.test(causal_strength ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
             cohen.d = cohen.d(causal_strength ~ delay, na.rm =T)$estimate,
             BF =round(exp(ttestBF(formula = causal_strength ~ delay, data = cur_data())@bayesFactor$bf),3)) %>%
-  mutate(comparison = "4 vs 6", intvn = 1, exp="long")-> delay_4vs6_1e.long
+  mutate(comparison = "4 vs 6", intvn = 1, exp="exp1b")-> delay_4vs6_1e.long
 
 veri_df.long %>%
   subset(intvn == '1' & delay %in% c('8', '6')) %>%
@@ -495,7 +489,7 @@ mutate(delay = factor(delay)) %>%
             wilcox = wilcox.test(causal_strength ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
             cohen.d = cohen.d(causal_strength ~ delay, na.rm =T)$estimate,
             BF =round(exp(ttestBF(formula = causal_strength ~ delay, data = cur_data())@bayesFactor$bf),3)) %>%
-  mutate(comparison = "6 vs 8", intvn = 1, exp="long")-> delay_6vs8_1e.long
+  mutate(comparison = "6 vs 8", intvn = 1, exp="exp1b")-> delay_6vs8_1e.long
 
 veri_df.long %>%
   subset(intvn == '2' & delay %in% c('6', '8')) %>%
@@ -504,7 +498,7 @@ mutate(delay = factor(delay)) %>%
             wilcox = wilcox.test(causal_strength ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
             cohen.d = cohen.d(causal_strength ~ delay, na.rm =T)$estimate,
             BF =round(exp(ttestBF(formula = causal_strength ~ delay, data = cur_data())@bayesFactor$bf),3)) %>%
-  mutate(comparison = "6 vs 8", intvn = 1, exp="long")-> delay_6vs8_2e.long
+  mutate(comparison = "6 vs 8", intvn = 2, exp="exp1b")-> delay_6vs8_2e.long
 
 veri_df.long %>%
   subset(intvn == '2' & delay %in% c('8', '10')) %>%
@@ -513,7 +507,7 @@ mutate(delay = factor(delay)) %>%
             wilcox = wilcox.test(causal_strength ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
             cohen.d = cohen.d(causal_strength ~ delay, na.rm =T)$estimate,
             BF =round(exp(ttestBF(formula = causal_strength ~ delay, data = cur_data())@bayesFactor$bf),3)) %>%
-  mutate(comparison = "8 vs 10", intvn = 1, exp="long")-> delay_10vs8_2e.long
+  mutate(comparison = "8 vs 10", intvn = 2, exp="exp1b")-> delay_10vs8_2e.long
 
 
 rbind(delay_2vs4_0e.long,
@@ -525,18 +519,11 @@ rbind(delay_2vs4_0e.long,
 )
 ```
 
-```{r}
-group1 <- veri_df.long %>% subset(intvn == '2' & delay == '10')
-group2 <- veri_df.long %>% subset(intvn == '0' & delay == '2')
-t.test(group1$causal_strength, group2$causal_strength, alternative = "two.sided")
-wilcox.test(group1$causal_strength, group2$causal_strength, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)
-```
 
-
-
-## testing for Nonverdical
+## Testing for Nonverdicals
 
 ```{r}
+# visualizations
 study0.long %>%
   subset(rel_type == "nonVeridical") %>%
     group_by(task_id, delay, intvn, condition_index) %>%
@@ -590,6 +577,131 @@ theme(legend.position = "none") +
   scale_color_hue(h = c(180, 300)) 
 ```
 
+```{r}
+t.test(cs ~ intvn, alternative = "two.sided", data = subset(nonVeri_df.long, delay == '6' & intvn %in% c('0', '1')))
+
+nonVeri_df.long %>%
+  subset(delay == '6' & intvn %in% c('0', '1')) %>%
+  group_by(delay) %>%
+  dplyr::summarise(t.p.value = t.test(cs ~ intvn, alternative = "two.sided", data = .)$p.value,
+            wilcox = wilcox.test(cs ~ intvn, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95, data = .)$p.value,
+            cohen.d = cohen.d(cs ~ intvn, na.rm =T, data = .)$estimate,
+            BF =round(exp(ttestBF(formula = cs ~ intvn, data = .)@bayesFactor$bf),3)) %>%
+  mutate(comparison = "0 vs 1 event", delay = "6 hrs", exp="exp1b")
+```
+### the influence of intervening events
+
+```{r}
+nonVeri_df.long %>%
+  subset(delay == '6' & intvn %in% c('0', '1')) %>%
+  mutate(intvn = factor(intvn)) %>%
+  group_by(delay) %>%
+  dplyr::summarise(t.p.value = t.test(cs ~ intvn, alternative = "two.sided", data = .)$p.value,
+            wilcox = wilcox.test(cs ~ intvn, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95, data = .)$p.value,
+            cohen.d = cohen.d(cs ~ intvn, na.rm =T, data = .)$estimate,
+            BF =round(exp(ttestBF(formula = cs ~ intvn, data = .)@bayesFactor$bf),3)) %>%
+  mutate(comparison = "0 vs 1 event", delay = "6 hrs", exp="exp1b")-> intvn_0vs1.long.nonVeri
+
+nonVeri_df.long %>%
+  subset(delay == '6' & intvn %in% c('1', '2')) %>%
+    mutate(intvn = factor(intvn)) %>%
+  group_by(delay) %>%
+  summarise(t.p.value = t.test(cs ~ intvn, alternative = "two.sided", data = .)$p.value,
+            wilcox = wilcox.test(cs ~ intvn, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95, data = .)$p.value,
+            cohen.d = cohen.d(cs ~ intvn,na.rm =T, data = .)$estimate,
+            BF =round(exp(ttestBF(formula = cs ~ intvn, data = .)@bayesFactor$bf),3)
+            ) %>%
+  mutate(comparison = "1 vs 2 events", delay = "6 hrs", exp="exp1b")-> intvn_1vs2.long.nonVeri
+
+nonVeri_df.long %>%
+  subset(delay == '6' & intvn %in% c('0', '2')) %>%
+    mutate(intvn = factor(intvn)) %>%
+  group_by(delay) %>%
+  summarise(t.p.value = t.test(cs ~ intvn, alternative = "two.sided", data = .)$p.value,
+            wilcox = wilcox.test(cs ~ intvn, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95, data = .)$p.value,
+            cohen.d = cohen.d(cs ~ intvn,na.rm =T, data = .)$estimate,
+            BF =round(exp(ttestBF(formula = cs ~ intvn, data = .)@bayesFactor$bf),3)) %>%
+  mutate(comparison = "0 vs 2 events", delay = "6 hrs", exp="exp1b")-> intvn_0vs2.long.nonVeri
+
+rbind(intvn_0vs1.long.nonVeri,
+      intvn_1vs2.long.nonVeri,
+      intvn_0vs2.long.nonVeri)
+
+```
+
+```{r}
+nonVeri_df.long %>%
+  subset(intvn == '0' & delay %in% c('2', '4')) %>%
+mutate(delay = factor(delay)) %>%
+  group_by(intvn) %>%
+  summarise(t.p.value = t.test(cs ~ delay, alternative = "two.sided")$p.value,
+            wilcox = wilcox.test(cs ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
+            cohen.d = cohen.d(cs ~ delay, na.rm =T)$estimate,
+            BF =round(exp(ttestBF(formula = cs ~ delay, data = cur_data())@bayesFactor$bf),3)) %>%
+  mutate(comparison = "2 vs 4", intvn = 0, exp="exp1b")-> delay_2vs4_0e.long.nonVeri
+
+nonVeri_df.long %>%
+  subset(intvn == '0' & delay %in% c('4', '6')) %>%
+mutate(delay = factor(delay)) %>%
+  group_by(intvn) %>%
+  summarise(t.p.value = t.test(cs ~ delay, alternative = "two.sided")$p.value,
+            wilcox = wilcox.test(cs ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
+            cohen.d = cohen.d(cs ~ delay, na.rm =T)$estimate,
+            BF =round(exp(ttestBF(formula = cs ~ delay, data = cur_data())@bayesFactor$bf),3)) %>%
+  mutate(comparison = "4 vs 6", intvn = 0, exp="exp1b")-> delay_4vs6_0e.long.nonVeri
+
+nonVeri_df.long %>%
+  subset(intvn == '1' & delay %in% c('4', '6')) %>%
+mutate(delay = factor(delay)) %>%
+  group_by(intvn) %>%
+  summarise(t.p.value = t.test(cs ~ delay, alternative = "two.sided")$p.value,
+            wilcox = wilcox.test(cs ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
+            cohen.d = cohen.d(cs ~ delay, na.rm =T)$estimate,
+            BF =round(exp(ttestBF(formula = cs ~ delay, data = cur_data())@bayesFactor$bf),3)) %>%
+  mutate(comparison = "4 vs 6", intvn = 1, exp="exp1b")-> delay_4vs6_1e.long.nonVeri
+
+nonVeri_df.long %>%
+  subset(intvn == '1' & delay %in% c('8', '6')) %>%
+mutate(delay = factor(delay)) %>%
+  group_by(intvn) %>%
+  summarise(t.p.value = t.test(cs ~ delay, alternative = "two.sided")$p.value,
+            wilcox = wilcox.test(cs ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
+            cohen.d = cohen.d(cs ~ delay, na.rm =T)$estimate,
+            BF =round(exp(ttestBF(formula = cs ~ delay, data = cur_data())@bayesFactor$bf),3)) %>%
+  mutate(comparison = "6 vs 8", intvn = 1, exp="exp1b")-> delay_6vs8_1e.long.nonVeri
+
+nonVeri_df.long %>%
+  subset(intvn == '2' & delay %in% c('6', '8')) %>%
+mutate(delay = factor(delay)) %>%
+  group_by(intvn) %>%
+  summarise(t.p.value = t.test(cs ~ delay, alternative = "two.sided")$p.value,
+            wilcox = wilcox.test(cs ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
+            cohen.d = cohen.d(cs ~ delay, na.rm =T)$estimate,
+            BF =round(exp(ttestBF(formula = cs ~ delay, data = cur_data())@bayesFactor$bf),3)) %>%
+  mutate(comparison = "6 vs 8", intvn = 2, exp="exp1b")-> delay_6vs8_2e.long.nonVeri
+
+nonVeri_df.long %>%
+  subset(intvn == '2' & delay %in% c('8', '10')) %>%
+mutate(delay = factor(delay)) %>%
+  group_by(intvn) %>%
+  summarise(t.p.value = t.test(cs ~ delay, alternative = "two.sided")$p.value,
+            wilcox = wilcox.test(cs ~ delay, alternative = "two.sided", conf.int = TRUE, conf.level = 0.95)$p.value,
+            cohen.d = cohen.d(cs ~ delay, na.rm =T)$estimate,
+            BF =round(exp(ttestBF(formula = cs ~ delay, data = cur_data())@bayesFactor$bf),3)) %>%
+  mutate(comparison = "8 vs 10", intvn = 2, exp="exp1b")-> delay_10vs8_2e.long.nonVeri
+
+
+rbind(delay_2vs4_0e.long.nonVeri,
+      delay_4vs6_0e.long.nonVeri,
+      delay_4vs6_1e.long.nonVeri,
+      delay_6vs8_1e.long.nonVeri,
+      delay_6vs8_2e.long.nonVeri,
+      delay_10vs8_2e.long.nonVeri
+)
+```
+
+
+
 ## descriptive analysis for memory
 
 ```{r}
@@ -638,3 +750,5 @@ good_memory_list %>%
     ungroup() %>%
     count(condition_index)
 ```
+
+
