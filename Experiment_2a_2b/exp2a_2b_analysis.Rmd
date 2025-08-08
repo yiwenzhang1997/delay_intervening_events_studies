@@ -25,7 +25,7 @@ library(bayestestR)
 ## Causal Strength
 
 ```{r}
-load("/Users/YIZ173/Documents/GitHub/delay_intervening_events_studies/Experiment_2a_2b/exp2-clean-data.RData")
+load("/Users/YIZ173/Documents/GitHub/delay_intervening_events_studies/Experiment_2a_2b/exp2-clean-data2.RData")
 cs_df.short$exp = "Experiment 2a \n (short timeframe)"
 cs_df.long$exp = "Experiment 2b \n (long timeframe)"
 
@@ -48,7 +48,7 @@ plot_theme <- theme(
 ```{r cars, fig.height=6, fig.width=10}
 # causal strength against 0
 cs_df %>%
-  group_by(exp, worker_id, rel_type, cs_type, condition) %>%
+  group_by(exp, user_id, rel_type, cs_type, condition) %>%
   summarise(cs_value = mean(causal_strength)) -> cs_subj_df
 
 cs_subj_df %>%
@@ -468,6 +468,8 @@ p6.3
 
 #-----Comparing conditions-----
 
+
+
 ```{r fig.height=6, fig.width=5}
 # these figures are not included in manuscript but very useful to compare across conditions
 rel_type_smry %>%
@@ -485,329 +487,347 @@ rel_type_smry %>%
   labs(x = "trial", y = "Causal Strength", color = "Condition")-> p1
 p1
 ```
-
-
-## regression analysis
+## t test analysis on each time point
 
 ### exp 2a
 
 #### causal strength
-```{r}
-# regression analysis
-veri_df.short$time <- as.numeric(veri_df.short$cs_type)-2.5
-veri_df.short$condition_index <- factor(veri_df.short$condition_index)
-veri_df.short$delay_time <- as.numeric(veri_df.short$delay)
-contrasts(veri_df.short$condition_index) <- contr.treatment(3, base = 2)
-contrasts(veri_df.short$condition_index)
-model <- lmer(causal_strength ~ time * condition_index + (1+time|worker_id), data = veri_df.short)
-summary(model)
-
-# compare 1 vs 3
-car::linearHypothesis(model, "condition_index1 - condition_index3 = 0") # p = 0.2951
-car::linearHypothesis(model, "time:condition_index1 - time:condition_index3 = 0") # p = 0.5583
-
-# change the reference and run the model again
-contrasts(veri_df.short$condition_index) <- contr.treatment(3, base = 1)
-contrasts(veri_df.short$condition_index)
-model <- lmer(causal_strength ~ time * condition_index + (1+time|worker_id), data = veri_df.short)
-summary(model)
-```
-
-
 
 ```{r}
-set.seed(1997)
-# get Bayes Factor
-# Define the model formula
-formula <- bf(causal_strength ~ condition_index * time + (time| worker_id))
+# Data preparation
+cs_df.short_agg <- cs_df.short %>% 
+  subset(rel_type == "veridical") %>% 
+  group_by(user_id, condition_index) %>% 
+  summarise(cs = mean(causal_strength), .groups = 'drop') %>% 
+  mutate(condition_index = factor(condition_index))
 
-# use default priors for different parameters
-priors <- c(
-  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
-  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
-  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
-  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
+# Fit model
+cs_df.short_agg_model <- lm(cs ~ condition_index, data = cs_df.short_agg)
+
+# Create results table
+library(knitr)
+
+# 1. ANOVA Results Table
+cat("ANOVA RESULTS\n")
+cat("=============\n")
+anova_results <- joint_tests(cs_df.short_agg_model)
+bf_anova <- anovaBF(cs ~ condition_index, data = cs_df.short_agg)
+
+anova_table <- data.frame(
+  Test = "Condition Effect",
+  F_value = round(anova_results$F.ratio, 3),
+  df = paste(anova_results$df1, anova_results$df2, sep = ", "),
+  p_value = ifelse(anova_results$p.value < 0.001, "<0.001", round(anova_results$p.value, 3)),
+  BF10 = round(exp(bf_anova@bayesFactor$bf), 3)
 )
-# Fit the model with specified Cauchy priors
-bayesian_model <- brm(
-  formula = formula,
-  data = subset(veri_df.short, rel_type == "veridical"),
-  family = gaussian(),  # Gaussian family, adjust if needed
-  prior = priors,
-  chains = 4,
-  iter = 2000,
-  cores = 4,
-  sample_prior = TRUE
-)
-summary(bayesian_model)
 
-# Calculate Bayes factors for each predictor
-bayes_factors <- bayesfactor_parameters(bayesian_model)
-print(bayes_factors)
+print(anova_table, row.names = FALSE)
 
+# 2. Pairwise Comparisons Table
+cat("\n\nPAIRWISE COMPARISONS\n")
+cat("====================\n")
 
+# Get pairwise results
+post_hoc <- emmeans(cs_df.short_agg_model, pairwise ~ condition_index, adjust = "BH")
+pairwise_results <- summary(post_hoc$contrasts)
+
+# Get condition means for effect sizes
+condition_means <- cs_df.short_agg %>%
+  group_by(condition_index) %>%
+  summarise(mean_cs = mean(cs), .groups = 'drop')
+
+# Calculate Bayes Factors for each comparison
+conditions <- levels(cs_df.short_agg$condition_index)
+pairwise_table <- data.frame()
+
+for (i in 1:(length(conditions)-1)) {
+  for (j in (i+1):length(conditions)) {
+    cond1 <- conditions[i]
+    cond2 <- conditions[j]
+    
+    # Get data for each condition
+    x1 <- cs_df.short_agg$cs[cs_df.short_agg$condition_index == cond1]
+    x2 <- cs_df.short_agg$cs[cs_df.short_agg$condition_index == cond2]
+    
+    # Calculate BF
+    bf_result <- ttestBF(x = x1, y = x2)
+    
+    # Find corresponding row in pairwise results
+    contrast_name <- paste(cond1, "-", cond2)
+    pairwise_row <- pairwise_results[grepl(paste(cond1, ".*", cond2, sep=""), pairwise_results$contrast) | 
+                                   grepl(paste(cond2, ".*", cond1, sep=""), pairwise_results$contrast), ]
+    
+    if (nrow(pairwise_row) > 0) {
+      pairwise_table <- rbind(pairwise_table, data.frame(
+        Comparison = paste("Condition", cond1, "vs", cond2),
+        Mean_Diff = round(abs(pairwise_row$estimate), 3),
+        SE = round(pairwise_row$SE, 3),
+        p_adj = ifelse(pairwise_row$p.value < 0.001, "<0.001", round(pairwise_row$p.value, 3)),
+        BF10 = round(exp(bf_result@bayesFactor$bf), 3)
+      ))
+    }
+  }
+}
+
+print(pairwise_table, row.names = FALSE)
 ```
-```{r}
-print(hypothesis(bayesian_model, "condition_index1 - condition_index3 < 0"))
-print(hypothesis(bayesian_model, "condition_index1:time - condition_index3:time < 0"))
-# https://rpubs.com/lindeloev/bayes_factors
-hypothesis(bayesian_model, "condition_index1 - condition_index3 = 0")
-```
-
-```{r}
-print(hypothesis(bayesian_model, "condition_index1 = 0"))
-```
-
-
 
 #### predictive strength
-```{r}
-# regression
-time_mapping <- c(
-  '1-6' = 0,
-  '7-12' = 1,
-  '13-18' = 2,
-  '19-24' = 3
-)
-
-pred_p_df.short$time <- scale(time_mapping[pred_p_df.short$half])
-pred_p_df.short$condition_index <- factor(pred_p_df.short$condition_index, levels = c('1','2','3'))
-contrasts(pred_p_df.short$condition_index) <- contr.treatment(3, base = 2)
-contrasts(pred_p_df.short$condition_index)
-model <- lmer(pred_strength ~ condition_index * time + (time|task_id), data = pred_p_df.short)
-summary(model)
-
-car::linearHypothesis(model, "condition_index1 - condition_index3 = 0")
-car::linearHypothesis(model, "condition_index1:time - condition_index3:time = 0")
-
-# # Change reference
-# contrasts(pred_p_df.short$condition_index) <- contr.treatment(3, base = 1)
-# contrasts(pred_p_df.short$condition_index)
-# model2 <- lmer(pred_strength ~ condition_index * time + (time|task_id), data = pred_p_df.short)
-# summary(model2)
-```
-
 
 ```{r}
-set.seed(1997)
-# Bayes Factor
-formula <- bf(pred_strength ~ condition_index * time + (time | task_id))
 
-# Set Cauchy priors for different parameters
-priors <- c(
-  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
-  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
-  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
-  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
-)
-# Fit the model with specified Cauchy priors
-bayesian_model <- brm(
-  formula = formula,
-  data = pred_p_df.short,
-  family = gaussian(),  # Gaussian family, adjust if needed
-  prior = priors,
-  sample_prior = TRUE,
-  chains = 4,
-  iter = 2000,
-  cores = 4
-)
-summary(bayesian_model)
+pred_p_df.short.1_24_model <- lm(pred_strength ~ condition_index, data = pred_p_df.short.1_24)
 
-# Calculate Bayes factors for each predictor
-bayes_factors <- bayesfactor_parameters(bayesian_model)
-print(bayes_factors)
+# Create results table
+library(knitr)
+
+# 1. ANOVA Results Table
+cat("ANOVA RESULTS\n")
+cat("=============\n")
+anova_results <- joint_tests(pred_p_df.short.1_24_model)
+bf_anova <- anovaBF(pred_strength ~ condition_index, data = pred_p_df.short.1_24)
+
+anova_table <- data.frame(
+  Test = "Condition Effect",
+  F_value = round(anova_results$F.ratio, 3),
+  df = paste(anova_results$df1, anova_results$df2, sep = ", "),
+  p_value = ifelse(anova_results$p.value < 0.001, "<0.001", round(anova_results$p.value, 3)),
+  BF10 = round(exp(bf_anova@bayesFactor$bf), 3)
+)
+
+print(anova_table, row.names = FALSE)
+
+# 2. Pairwise Comparisons Table
+cat("\n\nPAIRWISE COMPARISONS\n")
+cat("====================\n")
+
+# Get pairwise results
+post_hoc <- emmeans(pred_p_df.short.1_24_model, pairwise ~ condition_index, adjust = "BH")
+pairwise_results <- summary(post_hoc$contrasts)
+
+# Get condition means for effect sizes
+condition_means <- pred_p_df.short.1_24 %>%
+  group_by(condition_index) %>%
+  summarise(mean_pred_strength = mean(pred_strength), .groups = 'drop')
+
+# Calculate Bayes Factors for each comparison
+conditions <- levels(pred_p_df.short.1_24$condition_index)
+pairwise_table <- data.frame()
+
+for (i in 1:(length(conditions)-1)) {
+  for (j in (i+1):length(conditions)) {
+    cond1 <- conditions[i]
+    cond2 <- conditions[j]
+    
+    # Get data for each condition
+    x1 <- pred_p_df.short.1_24$pred_strength[pred_p_df.short.1_24$condition_index == cond1]
+    x2 <- pred_p_df.short.1_24$pred_strength[pred_p_df.short.1_24$condition_index == cond2]
+    
+    # Calculate BF
+    bf_result <- ttestBF(x = x1, y = x2)
+    
+    # Find corresponding row in pairwise results
+    contrast_name <- paste(cond1, "-", cond2)
+    pairwise_row <- pairwise_results[grepl(paste(cond1, ".*", cond2, sep=""), pairwise_results$contrast) | 
+                                   grepl(paste(cond2, ".*", cond1, sep=""), pairwise_results$contrast), ]
+    
+    if (nrow(pairwise_row) > 0) {
+      pairwise_table <- rbind(pairwise_table, data.frame(
+        Comparison = paste("Condition", cond1, "vs", cond2),
+        Mean_Diff = round(abs(pairwise_row$estimate), 3),
+        SE = round(pairwise_row$SE, 3),
+        p_adj = ifelse(pairwise_row$p.value < 0.001, "<0.001", round(pairwise_row$p.value, 3)),
+        BF10 = round(exp(bf_result@bayesFactor$bf), 3)
+      ))
+    }
+  }
+}
+
+print(pairwise_table, row.names = FALSE)
 ```
 
 ### exp 2b
 
 #### causal strength
-```{r}
-# regression analysis
-cs_df.long$condition_index <- factor(cs_df.long$condition_index)
-cs_df.long$time <- as.numeric(cs_df.long$cs_type)-2.5
-contrasts(cs_df.long$condition_index) <- contr.treatment(4, base = 2)
-contrasts(cs_df.long$condition_index)
-
-model <- lmer(causal_strength ~ condition_index * time + (time|worker_id), data = subset(cs_df.long, rel_type == "veridical"))
-summary(model)
-# Get estimated marginal means for each group at each time point
-emm <- emmeans(model, ~ condition_index*time | time)
-# Pairwise comparisons for each time point
-contrast_results <- pairs(emm)
-print(contrast_results)
-car::linearHypothesis(model, "condition_index1 - condition_index4 = 0")
-```
 
 ```{r}
-# Bayes Factor
-formula <- bf(causal_strength ~ condition_index * time + (1| worker_id))
+# Data preparation
+cs_df.long_agg <- cs_df.long %>% 
+  subset(rel_type == "veridical") %>% 
+  group_by(user_id, condition_index) %>% 
+  summarise(cs = mean(causal_strength), .groups = 'drop') %>% 
+  mutate(condition_index = factor(condition_index))
 
-# Set Cauchy priors for different parameters
-priors <- c(
-  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
-  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
-  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
-  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
+# Fit model
+cs_df.long_agg_model <- lm(cs ~ condition_index, data = cs_df.long_agg)
+
+# Create results table
+library(knitr)
+
+# 1. ANOVA Results Table
+cat("ANOVA RESULTS\n")
+cat("=============\n")
+anova_results <- joint_tests(cs_df.long_agg_model)
+bf_anova <- anovaBF(cs ~ condition_index, data = cs_df.long_agg)
+
+anova_table <- data.frame(
+  Test = "Condition Effect",
+  F_value = round(anova_results$F.ratio, 3),
+  df = paste(anova_results$df1, anova_results$df2, sep = ", "),
+  p_value = ifelse(anova_results$p.value < 0.001, "<0.001", round(anova_results$p.value, 3)),
+  BF10 = round(exp(bf_anova@bayesFactor$bf), 3)
 )
-# Fit the model with specified Cauchy priors
-bayesian_model <- brm(
-  formula = formula,
-  data = subset(cs_df.long, rel_type == "veridical"),
-  family = gaussian(),  # Gaussian family, adjust if needed
-  prior = priors,
-  chains = 4,
-  iter = 2000,
-  cores = 4,
-  sample_prior = TRUE
-)
-summary(bayesian_model)
 
-# Calculate Bayes factors for each predictor
-bayes_factors <- bayesfactor_parameters(bayesian_model)
-print(bayes_factors)
-hypothesis(bayesian_model, "condition_index1 - condition_index4 = 0")
+print(anova_table, row.names = FALSE)
 
+# 2. Pairwise Comparisons Table
+cat("\n\nPAIRWISE COMPARISONS\n")
+cat("====================\n")
+
+# Get pairwise results
+post_hoc <- emmeans(cs_df.long_agg_model, pairwise ~ condition_index, adjust = "BH")
+pairwise_results <- summary(post_hoc$contrasts)
+
+# Get condition means for effect sizes
+condition_means <- cs_df.long_agg %>%
+  group_by(condition_index) %>%
+  summarise(mean_cs = mean(cs), .groups = 'drop')
+
+# Calculate Bayes Factors for each comparison
+conditions <- levels(cs_df.long_agg$condition_index)
+pairwise_table <- data.frame()
+
+for (i in 1:(length(conditions)-1)) {
+  for (j in (i+1):length(conditions)) {
+    cond1 <- conditions[i]
+    cond2 <- conditions[j]
+    
+    # Get data for each condition
+    x1 <- cs_df.long_agg$cs[cs_df.long_agg$condition_index == cond1]
+    x2 <- cs_df.long_agg$cs[cs_df.long_agg$condition_index == cond2]
+    
+    # Calculate BF
+    bf_result <- ttestBF(x = x1, y = x2)
+    
+    # Find corresponding row in pairwise results
+    contrast_name <- paste(cond1, "-", cond2)
+    pairwise_row <- pairwise_results[grepl(paste(cond1, ".*", cond2, sep=""), pairwise_results$contrast) | 
+                                   grepl(paste(cond2, ".*", cond1, sep=""), pairwise_results$contrast), ]
+    
+    if (nrow(pairwise_row) > 0) {
+      pairwise_table <- rbind(pairwise_table, data.frame(
+        Comparison = paste("Condition", cond1, "vs", cond2),
+        Mean_Diff = round(abs(pairwise_row$estimate), 3),
+        SE = round(pairwise_row$SE, 3),
+        p_adj = ifelse(pairwise_row$p.value < 0.001, "<0.001", round(pairwise_row$p.value, 3)),
+        BF10 = round(exp(bf_result@bayesFactor$bf), 3)
+      ))
+    }
+  }
+}
+
+print(pairwise_table, row.names = FALSE)
 ```
 
 #### predictive strength
 
 ```{r}
-pred_p_df.long$condition_index <- factor(pred_p_df.long$condition_index)
-pred_p_df.long$time <- as.numeric(pred_p_df.long$half)-2.5 # center trial number
-contrasts(pred_p_df.long$condition_index) <- contr.treatment(4, base = 2)
-contrasts(pred_p_df.long$condition_index)
-summary(lmer(pred_strength ~ condition_index * time + (time|task_id), data = pred_p_df.long))
 
-# Define the model formula
-formula <- bf(pred_strength ~ condition_index * time + (time | task_id))
+pred_p_df.long.1_24_model <- lm(pred_strength ~ condition_index, data = pred_p_df.long.1_24)
 
-# Set Cauchy priors for different parameters
-priors <- c(
-  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
-  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
-  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
-  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
+# Create results table
+library(knitr)
+
+# 1. ANOVA Results Table
+cat("ANOVA RESULTS\n")
+cat("=============\n")
+anova_results <- joint_tests(pred_p_df.long.1_24_model)
+bf_anova <- anovaBF(pred_strength ~ condition_index, data = pred_p_df.long.1_24)
+
+anova_table <- data.frame(
+  Test = "Condition Effect",
+  F_value = round(anova_results$F.ratio, 3),
+  df = paste(anova_results$df1, anova_results$df2, sep = ", "),
+  p_value = ifelse(anova_results$p.value < 0.001, "<0.001", round(anova_results$p.value, 3)),
+  BF10 = round(exp(bf_anova@bayesFactor$bf), 3)
 )
-# Fit the model with specified Cauchy priors
-bayesian_model <- brm(
-  formula = formula,
-  data = pred_p_df.long,
-  family = gaussian(),  # Gaussian family, adjust if needed
-  prior = priors,
-  chains = 4,
-  iter = 2000,
-  cores = 4
-)
-summary(bayesian_model)
 
-# Calculate Bayes factors for each predictor
-bayes_factors <- bayesfactor_parameters(bayesian_model)
-print(bayes_factors)
+print(anova_table, row.names = FALSE)
+
+# 2. Pairwise Comparisons Table
+cat("\n\nPAIRWISE COMPARISONS\n")
+cat("====================\n")
+
+# Get pairwise results
+post_hoc <- emmeans(pred_p_df.long.1_24_model, pairwise ~ condition_index, adjust = "BH")
+pairwise_results <- summary(post_hoc$contrasts)
+
+# Get condition means for effect sizes
+condition_means <- pred_p_df.long.1_24 %>%
+  group_by(condition_index) %>%
+  summarise(mean_pred_strength = mean(pred_strength), .groups = 'drop')
+
+# Calculate Bayes Factors for each comparison
+conditions <- levels(pred_p_df.long.1_24$condition_index)
+pairwise_table <- data.frame()
+
+for (i in 1:(length(conditions)-1)) {
+  for (j in (i+1):length(conditions)) {
+    cond1 <- conditions[i]
+    cond2 <- conditions[j]
+    
+    # Get data for each condition
+    x1 <- pred_p_df.long.1_24$pred_strength[pred_p_df.long.1_24$condition_index == cond1]
+    x2 <- pred_p_df.long.1_24$pred_strength[pred_p_df.long.1_24$condition_index == cond2]
+    
+    # Calculate BF
+    bf_result <- ttestBF(x = x1, y = x2)
+    
+    # Find corresponding row in pairwise results
+    contrast_name <- paste(cond1, "-", cond2)
+    pairwise_row <- pairwise_results[grepl(paste(cond1, ".*", cond2, sep=""), pairwise_results$contrast) | 
+                                   grepl(paste(cond2, ".*", cond1, sep=""), pairwise_results$contrast), ]
+    
+    if (nrow(pairwise_row) > 0) {
+      pairwise_table <- rbind(pairwise_table, data.frame(
+        Comparison = paste("Condition", cond1, "vs", cond2),
+        Mean_Diff = round(abs(pairwise_row$estimate), 3),
+        SE = round(pairwise_row$SE, 3),
+        p_adj = ifelse(pairwise_row$p.value < 0.001, "<0.001", round(pairwise_row$p.value, 3)),
+        BF10 = round(exp(bf_result@bayesFactor$bf), 3)
+      ))
+    }
+  }
+}
+
+print(pairwise_table, row.names = FALSE)
 ```
 
 
 #-------Exp2a vs Exp2b--------
 
-## regression for veridical ratings
-```{r}
-# regression comparing short and long 
-cs_df$trial = as.numeric(factor(cs_df$cs_type, levels = c('6','12','18','24'))) - 2.5
-model <- lmer(causal_strength ~ trial*exp + (trial|worker_id), data = subset(cs_df, rel_type == "veridical"))
-summary(model)
+## veridical
 
-# Bayes Factor for regression coefficient
-formula <- bf(causal_strength ~ trial*exp + (trial|worker_id))
-priors <- c(
-  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
-  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
-  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
-  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
-)
-# Fit the model with specified Cauchy priors
-bayesian_model <- brm(
-  formula = formula,
-  data = subset(cs_df, rel_type == "veridical"),
-  family = gaussian(),  # Gaussian family, adjust if needed
-  prior = priors,
-  chains = 4,
-  iter = 2000,
-  cores = 4
-)
-summary(bayesian_model)
-
-# Calculate Bayes factors for each predictor
-bayes_factors <- bayesfactor_parameters(bayesian_model)
-print(bayes_factors)
-```
+### t test for aggregated casual strength of short and long
 
 ```{r}
-pred_p_df$trial = as.numeric(factor(pred_p_df$half)) - 2.5
-model <- lmer(pred_strength ~ trial*exp + (trial|task_id), data = pred_p_df)
-summary(model)
+cs_df.agg <- rbind(mutate(cs_df.short_agg, exp = "exp 2a"), mutate(cs_df.long_agg, exp = "exp 2b")) %>% mutate(exp = factor(exp))
 
-# Define the model formula
-formula <- bf(pred_strength ~ trial*exp + (trial|task_id))
-
-# Set Cauchy priors for different parameters
-priors <- c(
-  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
-  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
-  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
-  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
-)
-# Fit the model with specified Cauchy priors
-bayesian_model <- brm(
-  formula = formula,
-  data = pred_p_df,
-  family = gaussian(),  # Gaussian family, adjust if needed
-  prior = priors,
-  chains = 4,
-  iter = 2000,
-  cores = 4
-)
-summary(bayesian_model)
-
-# Calculate Bayes factors for each predictor
-bayes_factors <- bayesfactor_parameters(bayesian_model)
-print(bayes_factors)
+t.test(cs~exp, data = cs_df.agg, alternative = "two.sided")
+ttestBF(formula = cs~exp, data = cs_df.agg, alternative = "two.sided")
 ```
 
-## regression for non-veridical
+
+
+### t test for aggregated predictive strength of short and long
 
 ```{r}
-nonVeri_abs
+ps_df.agg <- rbind(mutate(pred_p_df.short.1_24, exp = "exp 2a"), mutate(pred_p_df.long.1_24, exp = "exp 2b")) %>% mutate(exp = factor(exp))
 
-nonVeri_abs$trial = as.numeric(factor(nonVeri_abs$cs_type, levels = c('6','12','18','24'))) - 2.5
-model <- lmer(abs_cs ~ trial*exp + (trial|worker_id), data = nonVeri_abs)
-summary(model)
-
-# Define the model formula
-formula <- bf(abs_cs ~ trial*exp + (trial|worker_id))
-
-# Set Cauchy priors for different parameters
-priors <- c(
-  prior(cauchy(0, 1), class = "b"),             # Cauchy prior for fixed effects
-  prior(cauchy(0, 2), class = "Intercept"),      # Cauchy prior for the intercept
-  prior(cauchy(0, 1), class = "sd"),             # Cauchy prior for random effect SDs
-  prior(cauchy(0, 1), class = "sigma")           # Cauchy prior for residual error
-)
-# Fit the model with specified Cauchy priors
-bayesian_model <- brm(
-  formula = formula,
-  data = nonVeri_abs,
-  family = gaussian(),  # Gaussian family, adjust if needed
-  prior = priors,
-  chains = 4,
-  iter = 2000,
-  cores = 4
-)
-summary(bayesian_model)
-
-# Calculate Bayes factors for each predictor
-bayes_factors <- bayesfactor_parameters(bayesian_model)
-print(bayes_factors)
-
+t.test(pred_strength~exp, data = ps_df.agg, alternative = "two.sided")
+ttestBF(formula = pred_strength~exp, data = ps_df.agg, alternative = "two.sided")
 ```
+
 
 # ------- Appendix or Supplymental Material------------------
 
@@ -1199,7 +1219,7 @@ nonVeri_abs.short$condition_index <- factor(nonVeri_abs.short$condition_index)
 nonVeri_abs.short$delay_time <- as.numeric(nonVeri_abs.short$delay)
 contrasts(nonVeri_abs.short$condition_index) <- contr.treatment(3, base = 2)
 contrasts(nonVeri_abs.short$condition_index)
-model <- lmer(causal_strength ~ time * condition_index + (1+time|worker_id), data = nonVeri_abs.short)
+model <- lmer(causal_strength ~ time * condition_index + (1+time|user_id), data = nonVeri_abs.short)
 summary(model)
 # Get estimated marginal means for each group at each time point
 emm <- emmeans(model, ~ condition_index | time)
@@ -1216,7 +1236,7 @@ nonVeri_abs.long$condition_index <- factor(nonVeri_abs.long$condition_index)
 nonVeri_abs.long$delay_time <- as.numeric(nonVeri_abs.long$delay)
 contrasts(nonVeri_abs.long$condition_index) <- contr.treatment(4, base = 2)
 contrasts(nonVeri_abs.long$condition_index)
-model <- lmer(causal_strength ~ time * condition_index + (1+time|worker_id), data = nonVeri_abs.long)
+model <- lmer(causal_strength ~ time * condition_index + (1+time|user_id), data = nonVeri_abs.long)
 summary(model)
 # Get estimated marginal means for each group at each time point
 emm <- emmeans(model, ~ condition_index | time)
