@@ -207,7 +207,7 @@ cs_df.short %>%
 
 # condition for exp 2b
 conditions.long <- 
-  data.frame(condition_index = factor(c(1,1,2,2,3,3,4,4)),
+  data.frame(condition_index = c(1,1,2,2,3,3,4,4),
              cause_order = c("c1", "c3", "c1", "c3", "c1", "c3", "c1", "c3"),
              # effect_order = c("e1","e3","e1","e3","e1","e3"),
              delay = c(3, 1, 9, 3, 11, 9, 0, 0),
@@ -487,7 +487,6 @@ rel_type_smry %>%
   labs(x = "trial", y = "Causal Strength", color = "Condition")-> p1
 p1
 ```
-## t test analysis on each time point
 
 ### exp 2a
 
@@ -576,7 +575,13 @@ print(pairwise_table, row.names = FALSE)
 
 ```{r}
 
-pred_p_df.short.1_24_model <- lm(pred_strength ~ condition_index, data = pred_p_df.short.1_24)
+# Data preparation
+pred_p_df.short_agg <- pred_p_df.short.1_24 %>% 
+  group_by(user_id, condition_index) %>% 
+  summarise(ps = mean(pred_strength), .groups = 'drop') %>% 
+  mutate(condition_index = factor(condition_index))
+
+pred_p_df.short_agg_model <- lm(ps ~ condition_index, data = pred_p_df.short_agg)
 
 # Create results table
 library(knitr)
@@ -584,8 +589,8 @@ library(knitr)
 # 1. ANOVA Results Table
 cat("ANOVA RESULTS\n")
 cat("=============\n")
-anova_results <- joint_tests(pred_p_df.short.1_24_model)
-bf_anova <- anovaBF(pred_strength ~ condition_index, data = pred_p_df.short.1_24)
+anova_results <- joint_tests(pred_p_df.short_agg_model)
+bf_anova <- anovaBF(ps ~ condition_index, data = pred_p_df.short_agg)
 
 anova_table <- data.frame(
   Test = "Condition Effect",
@@ -602,16 +607,16 @@ cat("\n\nPAIRWISE COMPARISONS\n")
 cat("====================\n")
 
 # Get pairwise results
-post_hoc <- emmeans(pred_p_df.short.1_24_model, pairwise ~ condition_index, adjust = "BH")
+post_hoc <- emmeans(pred_p_df.short_agg_model, pairwise ~ condition_index, adjust = "BH")
 pairwise_results <- summary(post_hoc$contrasts)
 
 # Get condition means for effect sizes
-condition_means <- pred_p_df.short.1_24 %>%
+condition_means <- pred_p_df.short_agg %>%
   group_by(condition_index) %>%
-  summarise(mean_pred_strength = mean(pred_strength), .groups = 'drop')
+  summarise(mean_ps = mean(ps), .groups = 'drop')
 
 # Calculate Bayes Factors for each comparison
-conditions <- levels(pred_p_df.short.1_24$condition_index)
+conditions <- levels(pred_p_df.short_agg$condition_index)
 pairwise_table <- data.frame()
 
 for (i in 1:(length(conditions)-1)) {
@@ -620,8 +625,8 @@ for (i in 1:(length(conditions)-1)) {
     cond2 <- conditions[j]
     
     # Get data for each condition
-    x1 <- pred_p_df.short.1_24$pred_strength[pred_p_df.short.1_24$condition_index == cond1]
-    x2 <- pred_p_df.short.1_24$pred_strength[pred_p_df.short.1_24$condition_index == cond2]
+    x1 <- pred_p_df.short_agg$ps[pred_p_df.short_agg$condition_index == cond1]
+    x2 <- pred_p_df.short_agg$ps[pred_p_df.short_agg$condition_index == cond2]
     
     # Calculate BF
     bf_result <- ttestBF(x = x1, y = x2)
@@ -733,7 +738,13 @@ print(pairwise_table, row.names = FALSE)
 
 ```{r}
 
-pred_p_df.long.1_24_model <- lm(pred_strength ~ condition_index, data = pred_p_df.long.1_24)
+# Data preparation
+pred_p_df.long_agg <- pred_p_df.long.1_24 %>% 
+  group_by(user_id, condition_index) %>% 
+  summarise(ps = mean(pred_strength), .groups = 'drop') %>% 
+  mutate(condition_index = factor(condition_index))
+
+pred_p_df.long_agg_model <- lm(ps ~ condition_index, data = pred_p_df.long_agg)
 
 # Create results table
 library(knitr)
@@ -741,8 +752,8 @@ library(knitr)
 # 1. ANOVA Results Table
 cat("ANOVA RESULTS\n")
 cat("=============\n")
-anova_results <- joint_tests(pred_p_df.long.1_24_model)
-bf_anova <- anovaBF(pred_strength ~ condition_index, data = pred_p_df.long.1_24)
+anova_results <- joint_tests(pred_p_df.long_agg_model)
+bf_anova <- anovaBF(ps ~ condition_index, data = pred_p_df.long_agg)
 
 anova_table <- data.frame(
   Test = "Condition Effect",
@@ -759,16 +770,16 @@ cat("\n\nPAIRWISE COMPARISONS\n")
 cat("====================\n")
 
 # Get pairwise results
-post_hoc <- emmeans(pred_p_df.long.1_24_model, pairwise ~ condition_index, adjust = "BH")
+post_hoc <- emmeans(pred_p_df.long_agg_model, pairwise ~ condition_index, adjust = "BH")
 pairwise_results <- summary(post_hoc$contrasts)
 
 # Get condition means for effect sizes
-condition_means <- pred_p_df.long.1_24 %>%
+condition_means <- pred_p_df.long_agg %>%
   group_by(condition_index) %>%
-  summarise(mean_pred_strength = mean(pred_strength), .groups = 'drop')
+  summarise(mean_ps = mean(ps), .groups = 'drop')
 
 # Calculate Bayes Factors for each comparison
-conditions <- levels(pred_p_df.long.1_24$condition_index)
+conditions <- levels(pred_p_df.long_agg$condition_index)
 pairwise_table <- data.frame()
 
 for (i in 1:(length(conditions)-1)) {
@@ -777,8 +788,8 @@ for (i in 1:(length(conditions)-1)) {
     cond2 <- conditions[j]
     
     # Get data for each condition
-    x1 <- pred_p_df.long.1_24$pred_strength[pred_p_df.long.1_24$condition_index == cond1]
-    x2 <- pred_p_df.long.1_24$pred_strength[pred_p_df.long.1_24$condition_index == cond2]
+    x1 <- pred_p_df.long_agg$ps[pred_p_df.long_agg$condition_index == cond1]
+    x2 <- pred_p_df.long_agg$ps[pred_p_df.long_agg$condition_index == cond2]
     
     # Calculate BF
     bf_result <- ttestBF(x = x1, y = x2)
@@ -806,26 +817,43 @@ print(pairwise_table, row.names = FALSE)
 
 #-------Exp2a vs Exp2b--------
 
-## veridical
 
-### t test for aggregated casual strength of short and long
+## t test for aggregated casual strength of short and long
 
 ```{r}
 cs_df.agg <- rbind(mutate(cs_df.short_agg, exp = "exp 2a"), mutate(cs_df.long_agg, exp = "exp 2b")) %>% mutate(exp = factor(exp))
 
-t.test(cs~exp, data = cs_df.agg, alternative = "two.sided")
-ttestBF(formula = cs~exp, data = cs_df.agg, alternative = "two.sided")
+# Run t-test
+t_result <- t.test(cs ~ exp, data = cs_df.agg, alternative = "two.sided")
+print(t_result)
+
+# Calculate Cohen's d
+cohens_d <- cohen.d(cs ~ exp, data = cs_df.agg)
+print(cohens_d)
+
+# Bayes Factor
+bf_result <- ttestBF(formula = cs ~ exp, data = cs_df.agg, alternative = "two.sided")
+print(bf_result)
 ```
 
 
 
-### t test for aggregated predictive strength of short and long
+## t test for aggregated predictive strength of short and long
 
 ```{r}
-ps_df.agg <- rbind(mutate(pred_p_df.short.1_24, exp = "exp 2a"), mutate(pred_p_df.long.1_24, exp = "exp 2b")) %>% mutate(exp = factor(exp))
+ps_df.agg <- rbind(mutate(pred_p_df.short_agg, exp = "exp 2a"), mutate(pred_p_df.long_agg, exp = "exp 2b")) %>% mutate(exp = factor(exp))
 
-t.test(pred_strength~exp, data = ps_df.agg, alternative = "two.sided")
-ttestBF(formula = pred_strength~exp, data = ps_df.agg, alternative = "two.sided")
+# Run t-test
+t_result <- t.test(ps ~ exp, data = ps_df.agg, alternative = "two.sided")
+print(t_result)
+
+# Calculate Cohen's d
+cohens_d <- cohen.d(ps ~ exp, data = ps_df.agg)
+print(cohens_d)
+
+# Bayes Factor
+bf_result <- ttestBF(formula = ps ~ exp, data = ps_df.agg, alternative = "two.sided")
+print(bf_result)
 ```
 
 
@@ -1033,7 +1061,7 @@ nonVeri_abs %>%
     cohen.d = cohen.d(abs_cs, f=NA, mu = 0,na.rm =T)$estimate,
     BF =exp(ttestBF(abs_cs, mu = 0)@bayesFactor$bf)
   ) -> nonVeri_abs_smry
-
+nonVeri_abs_smry
 ```
 
 ## intervening events
@@ -1211,38 +1239,180 @@ delay_comparisons %>%
 ```
 
 ## comparing conditions
-```{r}
-nonVeri_abs
 
-nonVeri_abs.short$time <- as.numeric(nonVeri_abs.short$cs_type)-2.5
-nonVeri_abs.short$condition_index <- factor(nonVeri_abs.short$condition_index)
-nonVeri_abs.short$delay_time <- as.numeric(nonVeri_abs.short$delay)
-contrasts(nonVeri_abs.short$condition_index) <- contr.treatment(3, base = 2)
-contrasts(nonVeri_abs.short$condition_index)
-model <- lmer(causal_strength ~ time * condition_index + (1+time|user_id), data = nonVeri_abs.short)
-summary(model)
-# Get estimated marginal means for each group at each time point
-emm <- emmeans(model, ~ condition_index | time)
-# Pairwise comparisons for each time point
-contrast_results <- pairs(emm)
-print(contrast_results)
+```{r}
+# Data preparation
+nonVeri_abs.short_agg <- nonVeri_abs %>% 
+  subset(rel_type == "nonVeridical" & exp == "Experiment 2a \n (short timeframe)") %>% 
+  group_by(user_id, condition_index) %>% 
+  summarise(cs.abs = mean(abs_cs), .groups = 'drop') %>% 
+  mutate(condition_index = factor(condition_index))
+
+# Fit model
+nonVeri_abs.short_agg_model <- lm(cs.abs ~ condition_index, data = nonVeri_abs.short_agg)
+
+# Create results table
+library(knitr)
+
+# 1. ANOVA Results Table
+cat("ANOVA RESULTS\n")
+cat("=============\n")
+anova_results <- joint_tests(nonVeri_abs.short_agg_model)
+bf_anova <- anovaBF(cs.abs ~ condition_index, data = nonVeri_abs.short_agg)
+
+anova_table <- data.frame(
+  Test = "Condition Effect",
+  F_value = round(anova_results$F.ratio, 3),
+  df = paste(anova_results$df1, anova_results$df2, sep = ", "),
+  p_value = ifelse(anova_results$p.value < 0.001, "<0.001", round(anova_results$p.value, 3)),
+  BF10 = round(exp(bf_anova@bayesFactor$bf), 3)
+)
+
+print(anova_table, row.names = FALSE)
+
+# 2. Pairwise Comparisons Table
+cat("\n\nPAIRWISE COMPARISONS\n")
+cat("====================\n")
+
+# Get pairwise results
+post_hoc <- emmeans(nonVeri_abs.short_agg_model, pairwise ~ condition_index, adjust = "BH")
+pairwise_results <- summary(post_hoc$contrasts)
+
+# Get condition means for effect sizes
+condition_means <- nonVeri_abs.short_agg %>%
+  group_by(condition_index) %>%
+  summarise(mean_cs_abs = mean(cs.abs), .groups = 'drop')
+
+# Calculate Bayes Factors for each comparison
+conditions <- levels(nonVeri_abs.short_agg$condition_index)
+pairwise_table <- data.frame()
+
+for (i in 1:(length(conditions)-1)) {
+  for (j in (i+1):length(conditions)) {
+    cond1 <- conditions[i]
+    cond2 <- conditions[j]
+    
+    # Get data for each condition
+    x1 <- nonVeri_abs.short_agg$cs.abs[nonVeri_abs.short_agg$condition_index == cond1]
+    x2 <- nonVeri_abs.short_agg$cs.abs[nonVeri_abs.short_agg$condition_index == cond2]
+    
+    # Calculate BF
+    bf_result <- ttestBF(x = x1, y = x2)
+    
+    # Find corresponding row in pairwise results
+    contrast_name <- paste(cond1, "-", cond2)
+    pairwise_row <- pairwise_results[grepl(paste(cond1, ".*", cond2, sep=""), pairwise_results$contrast) | 
+                                   grepl(paste(cond2, ".*", cond1, sep=""), pairwise_results$contrast), ]
+    
+    if (nrow(pairwise_row) > 0) {
+      pairwise_table <- rbind(pairwise_table, data.frame(
+        Comparison = paste("Condition", cond1, "vs", cond2),
+        Mean_Diff = round(abs(pairwise_row$estimate), 3),
+        SE = round(pairwise_row$SE, 3),
+        p_adj = ifelse(pairwise_row$p.value < 0.001, "<0.001", round(pairwise_row$p.value, 3)),
+        BF10 = round(exp(bf_result@bayesFactor$bf), 3)
+      ))
+    }
+  }
+}
+
+print(pairwise_table, row.names = FALSE)
 ```
 
 ```{r}
-nonVeri_abs
+# Data preparation
+nonVeri_abs.long_agg <- nonVeri_abs %>% 
+  subset(rel_type == "nonVeridical" & exp == "Experiment 2b \n (long timeframe)") %>% 
+  group_by(user_id, condition_index) %>% 
+  summarise(cs.abs = mean(abs_cs), .groups = 'drop') %>% 
+  mutate(condition_index = factor(condition_index))
 
-nonVeri_abs.long$time <- as.numeric(nonVeri_abs.long$cs_type)-2.5
-nonVeri_abs.long$condition_index <- factor(nonVeri_abs.long$condition_index)
-nonVeri_abs.long$delay_time <- as.numeric(nonVeri_abs.long$delay)
-contrasts(nonVeri_abs.long$condition_index) <- contr.treatment(4, base = 2)
-contrasts(nonVeri_abs.long$condition_index)
-model <- lmer(causal_strength ~ time * condition_index + (1+time|user_id), data = nonVeri_abs.long)
-summary(model)
-# Get estimated marginal means for each group at each time point
-emm <- emmeans(model, ~ condition_index | time)
-# Pairwise comparisons for each time point
-contrast_results <- pairs(emm)
-print(contrast_results)
+# Fit model
+nonVeri_abs.long_agg_model <- lm(cs.abs ~ condition_index, data = nonVeri_abs.long_agg)
+
+# Create results table
+library(knitr)
+
+# 1. ANOVA Results Table
+cat("ANOVA RESULTS\n")
+cat("=============\n")
+anova_results <- joint_tests(nonVeri_abs.long_agg_model)
+bf_anova <- anovaBF(cs.abs ~ condition_index, data = nonVeri_abs.long_agg)
+
+anova_table <- data.frame(
+  Test = "Condition Effect",
+  F_value = round(anova_results$F.ratio, 3),
+  df = paste(anova_results$df1, anova_results$df2, sep = ", "),
+  p_value = ifelse(anova_results$p.value < 0.001, "<0.001", round(anova_results$p.value, 3)),
+  BF10 = round(exp(bf_anova@bayesFactor$bf), 3)
+)
+
+print(anova_table, row.names = FALSE)
+
+# 2. Pairwise Comparisons Table
+cat("\n\nPAIRWISE COMPARISONS\n")
+cat("====================\n")
+
+# Get pairwise results
+post_hoc <- emmeans(nonVeri_abs.long_agg_model, pairwise ~ condition_index, adjust = "BH")
+pairwise_results <- summary(post_hoc$contrasts)
+
+# Get condition means for effect sizes
+condition_means <- nonVeri_abs.long_agg %>%
+  group_by(condition_index) %>%
+  summarise(mean_cs_abs = mean(cs.abs), .groups = 'drop')
+
+# Calculate Bayes Factors for each comparison
+conditions <- levels(nonVeri_abs.long_agg$condition_index)
+pairwise_table <- data.frame()
+
+for (i in 1:(length(conditions)-1)) {
+  for (j in (i+1):length(conditions)) {
+    cond1 <- conditions[i]
+    cond2 <- conditions[j]
+    
+    # Get data for each condition
+    x1 <- nonVeri_abs.long_agg$cs.abs[nonVeri_abs.long_agg$condition_index == cond1]
+    x2 <- nonVeri_abs.long_agg$cs.abs[nonVeri_abs.long_agg$condition_index == cond2]
+    
+    # Calculate BF
+    bf_result <- ttestBF(x = x1, y = x2)
+    
+    # Find corresponding row in pairwise results
+    contrast_name <- paste(cond1, "-", cond2)
+    pairwise_row <- pairwise_results[grepl(paste(cond1, ".*", cond2, sep=""), pairwise_results$contrast) | 
+                                   grepl(paste(cond2, ".*", cond1, sep=""), pairwise_results$contrast), ]
+    
+    if (nrow(pairwise_row) > 0) {
+      pairwise_table <- rbind(pairwise_table, data.frame(
+        Comparison = paste("Condition", cond1, "vs", cond2),
+        Mean_Diff = round(abs(pairwise_row$estimate), 3),
+        SE = round(pairwise_row$SE, 3),
+        p_adj = ifelse(pairwise_row$p.value < 0.001, "<0.001", round(pairwise_row$p.value, 3)),
+        BF10 = round(exp(bf_result@bayesFactor$bf), 3)
+      ))
+    }
+  }
+}
+
+print(pairwise_table, row.names = FALSE)
 ```
 
 
+## comparing short and long
+
+```{r}
+nonVeri_abs.agg <- rbind(mutate(nonVeri_abs.short_agg, exp = "exp 2a"), mutate(nonVeri_abs.long_agg, exp = "exp 2b")) %>% mutate(exp = factor(exp))
+
+# Run t-test
+t_result <- t.test(cs.abs ~ exp, data = nonVeri_abs.agg, alternative = "two.sided")
+print(t_result)
+
+# Calculate Cohen's d
+cohens_d <- cohen.d(cs.abs ~ exp, data = nonVeri_abs.agg)
+print(cohens_d)
+
+# Bayes Factor
+bf_result <- ttestBF(formula = cs.abs ~ exp, data = nonVeri_abs.agg, alternative = "two.sided")
+print(bf_result)
+```
