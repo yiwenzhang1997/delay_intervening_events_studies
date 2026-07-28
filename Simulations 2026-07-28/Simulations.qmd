@@ -1,0 +1,1366 @@
+---
+title: "Causal Learning Models — Tests and Example Outputs"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    self-contained: true
+execute:
+  echo: true
+  warning: false
+  message: false
+jupyter: causal_model
+---
+
+# Setup
+
+If you are running this interactively in Positron and editing the source
+`.py` files, add these two lines to your console at the start of each
+session. They tell Python to automatically reload any changed files before
+each command, so you do not need to restart the kernel after edits:
+
+```python
+%load_ext autoreload
+%autoreload 2
+```
+
+These are IPython magic commands — they only work in the interactive
+console (or in a cell here), not in plain `.py` scripts.
+
+```{python}
+#| label: setup
+
+import numpy as np
+import pandas as pd
+import sys, os
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(".")))
+
+from data_generation_and_utils import make_dataset, summarise_dataset, expand_to_substeps
+from model_Bayesian_noisy_or import run_noisyor_model
+from model_td import run_td_model
+from model_Gong_et_al_2025 import run_gpgb_model
+from model_Gallistel_informativeness import run_gallistel_model
+from analysis import compare_datasets
+from analysis import run_analysis, compare_datasets
+from data_generation_and_utils import CBEx1, CBEx2, CBEx1_condition, CBEx2_condition
+
+
+print("All imports OK.")
+```
+
+---
+
+# Test 1: Dataset Generation
+
+```{python}
+#| label: test-dataset-generation
+
+dataset = make_dataset(
+    n_days   = 24,                  # total trials; divisible by 2^n_C and 4
+    C_causes = [(14, 0.8)],         # list of (hour, true_cs); first = C01
+    E_hour   = 22,                  # clock hour E is observed
+    LCSF_hours = [],                # hours for lure confound specified fixed causes
+    LUSF_hours = [],                # hours for lure uncorrelated specified fixed causes ... added later so not in all calls
+    n_LCIF = 0,                     # N of lure confound interim fixed
+    n_LCIR = 0,                     # N of lure confound interim random
+    n_LCBF = 0,                     # N of lure confound before-C fixed
+    n_LCBR = 0,                     # N of lure confound before-C random
+    n_LCAR = 0,                     # N of lure confound any-time random
+    n_LUIF = 1,                     # N of lure uncorrelated interim fixed
+    n_LUIR = 0,                     # N of lure uncorrelated interim random
+    n_LUBF = 0,                     # N of lure uncorrelated before-C fixed
+    n_LUBR = 0,                     # N of lure uncorrelated before-C random
+    n_LUAR = 0,                     # N of lure uncorrelated any-time random
+    n_LSIF = 0,                     # N of lure sporadic interim
+    n_LSBF = 0,                     # N of lure sporadic before-C
+    n_LSAF = 0,                     # N of lure sporadic any-time
+    seed   = 42                     # integer random seed for reproducibility
+)
+
+summarise_dataset(dataset)
+
+assert "absolute_hour" in dataset["hour"].columns
+assert abs(dataset["day"]["C01"].mean() - 0.5) < 0.01
+print("\nDataset generation tests passed.")
+```
+
+---
+
+# Test 2: BayesianNoisyOr — Single Dataset
+
+```{python}
+#| label: test-bayesian-simple
+
+dataset_simple = make_dataset(
+    n_days   = 24,
+    C_causes = [(14, 0.9)],
+    E_hour   = 22,
+    LCSF_hours = [],
+    n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+    n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+    n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+    seed   = 42
+)
+
+bayes_results = run_noisyor_model(
+    dataset       = dataset_simple,
+    draws         = 2000,
+    tune          = 1000,
+    chains        = 4,
+    target_accept = 0.9,
+    random_seed   = 42,
+    show_plots    = True,
+    verbose       = True
+)
+```
+
+---
+
+# Test 3: TD Model
+
+```{python}
+#| label: test-td-simple
+
+td_results = run_td_model(
+    dataset    = dataset_simple,
+    alpha      = 0.2,   # learning rate (0, 1]
+    beta       = 0.8,   # trace decay (0, 1); higher = longer eligibility memory
+    gamma      = 1.0,   # discount factor (0, 1]; 1.0 = no discounting
+    show_plots = True,
+    verbose    = True
+)
+```
+
+---
+
+# Test 4: Gallistel Informativeness
+
+```{python}
+#| label: test-gallistel
+
+dataset_gal = make_dataset(
+    n_days   = 48,
+    C_causes = [(14, 0.9)],
+    E_hour   = 22,
+    LCSF_hours = [],
+    n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+    n_LUIF = 1, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+    n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+    seed   = 42
+)
+
+gal_results = run_gallistel_model(
+    dataset = dataset_gal,
+    verbose = True
+)
+```
+
+---
+
+# Test 5: Learning Curves (n_blocks=4)
+
+```{python}
+#| label: test-learning-curves
+
+lc_results = run_analysis(
+    dataset_kwargs = dict(
+        n_days   = 96,
+        C_causes = [(14, 0.8)],
+        E_hour   = 22,
+        LCSF_hours = [],
+        n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+        n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+        n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+        seed   = 42
+    ),
+    models           = ["BayesianNoisyOr", "TD", "GPI", "GRI"],
+    n_datasets       = 1,           # N of datasets to generate and average over
+    n_blocks         = 16,           # N of learning curve checkpoints
+    draws            = 1000,        # NUTS posterior samples per chain
+    tune             = 500,         # NUTS tuning steps
+    chains           = 2,           # N of MCMC chains
+    target_accept    = 0.9,         # NUTS target acceptance rate
+    random_seed      = 42,          # base random seed
+    alpha_avg        = 1.0,         # opacity of average line in learning curve plot
+    alpha_individual = 0.5,         # opacity of individual dataset lines
+    show_plots       = True,
+    verbose          = True
+)
+```
+
+---
+
+# Test 6: Multiple Datasets (n_datasets=3)
+
+```{python}
+#| label: test-multiple-datasets
+
+multi_results = run_analysis(
+    dataset_kwargs = dict(
+        n_days   = 96,
+        C_causes = [(14, 0.8)],
+        E_hour   = 22,
+        LCSF_hours = [],
+        n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+        n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+        n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+        seed   = 42
+    ),
+    models           = ["TD", "BayesianNoisyOr", "GPI"], 
+    n_datasets       = 10,
+    n_blocks         = 16,
+    draws            = 1000,
+    tune             = 500,
+    chains           = 2,
+    target_accept    = 0.9,
+    random_seed      = 42,
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show_plots       = False,
+    verbose          = True
+)
+
+multi_results["aggregated_results"]["learning_curve_plot"]
+plt.show()
+```
+
+
+  TD:
+    C01: 0.146
+
+  BayesianNoisyOr:
+    C01: 0.683
+
+  GPI:
+    C01: 3.449
+
+
+
+
+
+
+
+
+
+---
+
+# Simulation 1. TD Confounded events before C and interim C-E.
+
+```{python}
+ds_no_confound = make_dataset(n_days=48*10, C_causes=[(18, 1.0)], E_hour=22, LCSF_hours=[],      seed=42)
+ds_confound_21 = make_dataset(n_days=48*10, C_causes=[(18, 1.0)], E_hour=22, LCSF_hours=[21],    seed=42)
+ds_confound_20 = make_dataset(n_days=48*10, C_causes=[(18, 1.0)], E_hour=22, LCSF_hours=[20],    seed=42)
+ds_confound_19 = make_dataset(n_days=48*10, C_causes=[(18, 1.0)], E_hour=22, LCSF_hours=[19],    seed=42)
+ds_confound_17 = make_dataset(n_days=48*10, C_causes=[(18, 1.0)], E_hour=22, LCSF_hours=[17],    seed=42)
+ds_confound_16 = make_dataset(n_days=48*10, C_causes=[(18, 1.0)], E_hour=22, LCSF_hours=[16],    seed=42)
+ds_confound_15 = make_dataset(n_days=48*10, C_causes=[(18, 1.0)], E_hour=22, LCSF_hours=[15],    seed=42)
+
+td_no_confound = run_td_model(dataset=ds_no_confound, alpha=0.2, beta=0.8, gamma=1.0, show_plots=False, verbose=False)
+td_confound_21 = run_td_model(dataset=ds_confound_21, alpha=0.2, beta=0.8, gamma=1.0, show_plots=False, verbose=False)
+td_confound_20 = run_td_model(dataset=ds_confound_20, alpha=0.2, beta=0.8, gamma=1.0, show_plots=False, verbose=False)
+td_confound_19 = run_td_model(dataset=ds_confound_19, alpha=0.2, beta=0.8, gamma=1.0, show_plots=False, verbose=False)
+td_confound_17 = run_td_model(dataset=ds_confound_17, alpha=0.2, beta=0.8, gamma=1.0, show_plots=False, verbose=False)
+td_confound_16 = run_td_model(dataset=ds_confound_16, alpha=0.2, beta=0.8, gamma=1.0, show_plots=False, verbose=False)
+td_confound_15 = run_td_model(dataset=ds_confound_15, alpha=0.2, beta=0.8, gamma=1.0, show_plots=False, verbose=False)
+
+
+
+# Extract final weights for C01 and the confound in each condition
+# No confound has no confound weight to extract
+
+conditions = {
+    "No confound"   : (td_no_confound, None),
+    "Confound hr 21": (td_confound_21, "LCSF01_21"),
+    "Confound hr 20": (td_confound_20, "LCSF01_20"),
+    "Confound hr 19": (td_confound_19, "LCSF01_19"),
+    "Confound hr 17": (td_confound_17, "LCSF01_17"),
+    "Confound hr 16": (td_confound_16, "LCSF01_16"),
+    "Confound hr 15": (td_confound_15, "LCSF01_15"),
+}
+
+print(f"{'Condition':<18} {'w_C01':>8} {'w_confound':>10}")
+print(f"{'-'*18} {'-'*8} {'-'*10}")
+
+c01_weights      = []
+confound_weights = []
+labels_plot      = []
+
+for label, (td_result, confound_name) in conditions.items():
+    cause_cols = td_result["cause_cols"]
+    w_final    = td_result["w_final"]
+    
+    c01_w      = w_final[cause_cols.index("C01")]
+    confound_w = w_final[cause_cols.index(confound_name)] if confound_name in cause_cols else float("nan")
+    
+    print(f"{label:<18} {c01_w:>8.4f} {confound_w:>10.4f}")
+    c01_weights.append(c01_w)
+    confound_weights.append(confound_w)
+    labels_plot.append(label)
+
+
+
+
+fig2, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+x     = np.arange(len(labels_plot))
+width = 0.6
+
+no_confound_val = c01_weights[0]
+
+# Left panel — C01
+ax1.bar(x, c01_weights, width, color="#1565C0", alpha=0.8)
+ax1.axhline(y=no_confound_val, color="black", linewidth=1.5, linestyle="--",
+            label=f"No confound = {no_confound_val:.8f}")
+ax1.set_xticks(x)
+ax1.set_xticklabels(labels_plot, rotation=15, ha="right", fontsize=9)
+ax1.set_ylabel("Final associative weight")
+ax1.set_title("C01 weight by confound position")
+ymin1 = min(c01_weights) * 0.95
+ymax1 = max(c01_weights) * 1.05
+ax1.set_ylim(ymin1, ymax1)
+ax1.legend(fontsize=8)
+
+# Right panel — Confound only (skip no confound condition)
+confound_labels = [l for l, v in zip(labels_plot, confound_weights) if not np.isnan(v)]
+confound_vals   = [v for v       in confound_weights                if not np.isnan(v)]
+x2 = np.arange(len(confound_labels))
+
+ax2.bar(x2, confound_vals, width, color="#E65100", alpha=0.8)
+ax2.set_xticks(x2)
+ax2.set_xticklabels(confound_labels, rotation=15, ha="right", fontsize=9)
+ax2.set_ylabel("Final associative weight")
+ax2.set_title("Confound weight by confound position")
+ymin2 = min(confound_vals) * 0.95
+ymax2 = max(confound_vals) * 1.05
+ax2.set_ylim(ymin2, ymax2)
+
+fig2.suptitle("TD Final Weights: C01 vs Confound by Confound Position\n"
+              "(C01 at hr 18, E at hr 22, beta=0.95, 10 steps/hr)",
+              fontsize=11, fontweight="bold")
+fig2.tight_layout(rect=[0, 0, 1, 0.95])
+plt.show()
+
+```
+
+
+
+# Simulation 2. A Single Uncorrelated Lure, 24 Trials
+
+```{python}
+#| label: test-model-comparison
+
+
+no_lure_16 = run_analysis(
+    dataset_kwargs = dict(
+        n_days   = 24,
+        C_causes = [(16, 1.0)],   # C01 fires at hour 14
+        E_hour   = 22,
+        LUSF_hours = [],
+        n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+        n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+        n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+        seed   = 42
+    ),
+    models        = ["BayesianNoisyOr", "TD", "GPI", "GRI"],
+    n_datasets    = 10,
+    n_blocks      = 4,
+    draws         = 1000,
+    tune          = 500,
+    chains        = 2,
+    target_accept = 0.9,
+    random_seed   = 42,
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show_plots    = False,
+    verbose       = False
+)
+
+lure_uncorrelated_interim_CE = run_analysis(
+    dataset_kwargs = dict(
+        n_days   = 24,
+        C_causes = [(16, 1.0)],   # C01 fires at hour 14
+        E_hour   = 22,
+        LUSF_hours = [21],
+        n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+        n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+        n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+        seed   = 42
+    ),
+    models        = ["BayesianNoisyOr", "TD", "GPI", "GRI"],
+    n_datasets    = 10,
+    n_blocks      = 4,
+    draws         = 1000,
+    tune          = 500,
+    chains        = 2,
+    target_accept = 0.9,
+    random_seed   = 42,
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show_plots    = False,
+    verbose       = False
+)
+
+lure_uncorrelated_before_C = run_analysis(
+    dataset_kwargs = dict(
+        n_days   = 24,
+        C_causes = [(16, 1.0)],   # C01 fires at hour 14
+        E_hour   = 22,
+        LUSF_hours = [11],
+        n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+        n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+        n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+        seed   = 42
+    ),
+    models        = ["BayesianNoisyOr", "TD", "GPI", "GRI"],
+    n_datasets    = 10,
+    n_blocks      = 4,
+    draws         = 1000,
+    tune          = 500,
+    chains        = 2,
+    target_accept = 0.9,
+    random_seed   = 42,
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show_plots    = False,
+    verbose       = False
+)
+
+
+
+tables, fig = compare_datasets(
+    results_list     = [no_lure_16, lure_uncorrelated_interim_CE, lure_uncorrelated_before_C],
+    labels           = ["No Lure 16", "Lure Uncorr Between C and E", "Lure Uncorr Before C"],
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show             = True
+)
+
+
+
+```
+
+
+
+  C01:
+                 No Lure 16  Lure Uncorr Between C and E  Lure Uncorr Before C
+BayesianNoisyOr       0.586                        0.554                 0.572 **this shows the pattern, it is just very small
+TD                    0.127                        0.129                 0.127 **this also shows the pattern, it is just very small
+GPI                   7.782                        7.782                 7.782
+GRI                   7.782                        7.782                 7.782
+
+
+
+
+
+# Simulation 3. Adding 20 Uncorrelated Lures 24 Trials
+
+```{python}
+#| label: test-model-comparison
+
+
+no_lure_16 = run_analysis(
+    dataset_kwargs = dict(
+        n_days   = 24,
+        C_causes = [(16, 1.0)],   # C01 fires at hour 14
+        E_hour   = 22,
+        LUSF_hours = [],
+        n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+        n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+        n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+        seed   = 42
+    ),
+    models        = ["BayesianNoisyOr", "TD", "GPI", "GRI"],
+    n_datasets    = 10,
+    n_blocks      = 4,
+    draws         = 1000,
+    tune          = 500,
+    chains        = 2,
+    target_accept = 0.9,
+    random_seed   = 42,
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show_plots    = False,
+    verbose       = False
+)
+
+    # n_LUIR = 0,                     # N of lure uncorrelated interim fixed
+
+
+lure_uncorrelated_interim_CE = run_analysis(
+    dataset_kwargs = dict(
+        n_days   = 24,
+        C_causes = [(16, 1.0)],   # C01 fires at hour 14
+        E_hour   = 22,
+        LUSF_hours = [],
+        n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+        n_LUIF = 20, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+        n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+        seed   = 42
+    ),
+    models        = ["BayesianNoisyOr", "TD", "GPI", "GRI"],
+    n_datasets    = 10,
+    n_blocks      = 4,
+    draws         = 1000,
+    tune          = 500,
+    chains        = 2,
+    target_accept = 0.9,
+    random_seed   = 42,
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show_plots    = False,
+    verbose       = False
+)
+
+    # n_LUBR = 0,                     # N of lure uncorrelated before-C random
+
+lure_uncorrelated_before_C = run_analysis(
+    dataset_kwargs = dict(
+        n_days   = 24,
+        C_causes = [(16, 1.0)],   # C01 fires at hour 14
+        E_hour   = 22,
+        LUSF_hours = [],
+        n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+        n_LUIF = 0, n_LUIR = 0, n_LUBF = 20, n_LUBR = 0, n_LUAR = 0,
+        n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+        seed   = 42
+    ),
+    models        = ["BayesianNoisyOr", "TD", "GPI", "GRI"],
+    n_datasets    = 10,
+    n_blocks      = 4,
+    draws         = 1000,
+    tune          = 500,
+    chains        = 2,
+    target_accept = 0.9,
+    random_seed   = 42,
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show_plots    = False,
+    verbose       = False
+)
+
+
+
+tables, fig = compare_datasets(
+    results_list     = [no_lure_16, lure_uncorrelated_interim_CE, lure_uncorrelated_before_C],
+    labels           = ["No Lure 16", "Lure Uncorr Between C and E", "Lure Uncorr Before C"],
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show             = True
+)
+
+
+
+
+
+
+
+
+```
+
+
+  C01:
+                 No Lure 16  Lure Uncorr Between C and E  Lure Uncorr Before C
+BayesianNoisyOr       0.586                        0.214                 0.349
+TD                    0.127                        0.154                 0.127
+GPI                   7.782                        7.782                 7.782
+GRI                   7.782                        7.782                 7.782
+
+
+
+
+# Simulation 4. Adding 1000 timesteps per hour for TD
+```{python}
+dataset_hourly = make_dataset(
+    n_days     = 24,
+    C_causes   = [(16, 1.0)],
+    E_hour     = 22,
+    LUSF_hours = [],
+    n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+    n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+    n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+    seed   = 42
+)
+
+dataset_hourly_expanded = expand_to_substeps(
+    dataset        = dataset_hourly,
+    steps_per_hour = 1000
+)
+
+td_hourly = run_td_model(
+    dataset    = dataset_hourly,
+    alpha      = 0.2,
+    beta       = 0.8,
+    gamma      = 1.0,
+    show_plots = False,
+    verbose    = False
+)
+
+td_hourly_expanded = run_td_model(
+    dataset    = dataset_hourly_expanded,
+    alpha      = 0.2,
+    beta       = 0.8,
+    gamma      = 1.0,
+    show_plots = False,
+    verbose    = False
+)
+
+print(f"Final w_C01 (hourly)          : {td_hourly['w_final'][0]:.4f}")
+print(f"Final w_C01 (hourly expanded) : {td_hourly_expanded['w_final'][0]:.4f}")
+
+def plot_td_timescale_comparison(td_results_list, labels, steps_per_hour_list,
+                                  show=True):
+    """
+    Compare TD weight trajectories across different timescale resolutions.
+
+    Converts the x-axis to days so that hourly and minute-level results
+    are directly comparable on the same scale.
+
+    Parameters
+    ----------
+    td_results_list    : list of run_td_model() output dicts
+    labels             : list of str, one label per result
+    steps_per_hour_list: list of int, steps_per_hour used for each dataset.
+                         Use 1 for the original hourly dataset.
+    show               : bool, call plt.show() (default True)
+    """
+    import matplotlib.cm as cm
+    tab10       = cm.get_cmap("tab10")
+    cond_colors = [tab10(i % 10) for i in range(len(td_results_list))]
+
+    # Get cause names from first result
+    cause_cols = td_results_list[0]["cause_cols"]
+    n_causes   = len(cause_cols)
+
+    fig, axes = plt.subplots(
+        nrows   = n_causes,
+        ncols   = 1,
+        figsize = (10, 3.5 * n_causes),
+        squeeze = False
+    )
+
+    for ci, cause in enumerate(cause_cols):
+        ax = axes[ci, 0]
+
+        for res, label, color, steps in zip(
+            td_results_list, labels, cond_colors, steps_per_hour_list
+        ):
+            w_history  = res["w_history"][:, ci]   # weights for this cause
+            n_steps    = len(w_history)
+            steps_per_day = 24 * steps
+
+            # Convert timestep index to days
+            days = np.arange(n_steps) / steps_per_day
+
+            ax.plot(days, w_history, color=color, linewidth=1.5, label=label)
+
+        ax.set_title(cause, fontsize=9, fontweight="bold")
+        ax.set_xlabel("Day", fontsize=8)
+        ax.set_ylabel("Associative weight (w)", fontsize=8)
+        ax.legend(fontsize=7)
+
+        # Free y-axis
+        all_vals = np.concatenate([r["w_history"][:, ci] for r in td_results_list])
+        ymin, ymax = np.nanmin(all_vals), np.nanmax(all_vals)
+        pad = max((ymax - ymin) * 0.1, 0.02)
+        ax.set_ylim(ymin - pad, ymax + pad)
+
+    fig.suptitle("TD Weight Trajectories — Timescale Comparison",
+                 fontsize=11, fontweight="bold")
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    if show:
+        plt.show()
+    return fig
+
+
+fig = plot_td_timescale_comparison(
+    td_results_list     = [td_hourly, td_hourly_expanded],
+    labels              = ["Hourly", "Hourly Expanded (1000 steps/hr)"],
+    steps_per_hour_list = [1, 1000],
+    show                = True
+)
+
+```
+
+TD basically learns nothing
+Final w_C01 (hourly)          : 0.1272
+Final w_C01 (hourly expanded) : 0.0000
+
+
+
+
+
+
+
+# Simulation 5. TD Modifying β (Beta) – the trace decay/persistence rate
+Near 0: the eligibility trace vanishes almost immediately after a stimulus fires, so only causes that occurred in the very last timestep can receive credit. Effectively no memory of past stimuli.
+Near 1: the trace decays very slowly, so causes that fired many timesteps ago still have a strong trace and can receive substantial credit. Long temporal memory.
+```{python}
+dataset_hourly = make_dataset(
+    n_days     = 24,
+    C_causes   = [(16, 1.0)],
+    E_hour     = 22,
+    LUSF_hours = [],
+    n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+    n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+    n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+    seed   = 42
+)
+
+td_hourly_beta80 = run_td_model(
+    dataset    = dataset_hourly,
+    alpha      = 0.2,        # learning rate (0, 1]
+    beta       = 0.8,        # trace decay (0, 1)
+    gamma      = 1.0,        # discount factor (0, 1]
+    show_plots = False,
+    verbose    = False
+)
+
+td_hourly_beta30 = run_td_model(
+    dataset    = dataset_hourly,
+    alpha      = 0.2,        # learning rate (0, 1]
+    beta       = 0.3,        # trace decay (0, 1)
+    gamma      = 1.0,        # discount factor (0, 1]
+    show_plots = False,
+    verbose    = False
+)
+
+print(f"Final w_C01 (beta = 0.8) : {td_hourly_beta80['w_final'][0]:.4f}")
+print(f"Final w_C01 (beta = 0.3) : {td_hourly_beta30['w_final'][0]:.4f}")
+
+fig = plot_td_timescale_comparison(
+    td_results_list     = [td_hourly_beta80, td_hourly_beta30],
+    labels              = ["beta = 0.8", "beta = 0.3"],
+    steps_per_hour_list = [1, 1],
+    show                = True
+)
+
+
+```
+
+Final w_C01 (beta = 0.8) : 0.1272
+Final w_C01 (beta = 0.3) : 0.0020
+
+
+
+
+
+
+
+# Simulation 6. TD Modifying Ɣ (Gamma)
+Near 0: future predictions are worth almost nothing. The model only cares about immediate reward, making it very myopic.
+At 1.0: no discounting at all — a prediction of reward 1000 timesteps in the future is worth exactly the same as an immediate reward. 
+```{python}
+dataset_hourly = make_dataset(
+    n_days     = 24*1000,
+    C_causes   = [(16, 1.0)],
+    E_hour     = 22,
+    LUSF_hours = [],
+    n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+    n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+    n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+    seed   = 42
+)
+
+td_hourly_gamma10 = run_td_model(
+    dataset    = dataset_hourly,
+    alpha      = 0.9,        # learning rate (0, 1]
+    beta       = 0.8,        # trace decay (0, 1)
+    gamma      = 1.0,        # discount factor (0, 1]
+    show_plots = False,
+    verbose    = False
+)
+
+td_hourly_gamma05 = run_td_model(
+    dataset    = dataset_hourly,
+    alpha      = 0.9,        # learning rate (0, 1]
+    beta       = 0.8,        # trace decay (0, 1)
+    gamma      = 0.1,        # discount factor (0, 1]
+    show_plots = False,
+    verbose    = False
+)
+
+print(f"Final w_C01 (gamma = 1.0) : {td_hourly_gamma10['w_final'][0]:.4f}")
+print(f"Final w_C01 (gamma = 0.5) : {td_hourly_gamma05['w_final'][0]:.4f}")
+
+fig = plot_td_timescale_comparison(
+    td_results_list     = [td_hourly_gamma10, td_hourly_gamma05],
+    labels              = ["gamma = 1.0", "gamma = 0.5"],
+    steps_per_hour_list = [1, 1],
+    show                = True
+)
+
+
+```
+
+
+# More for Understanding Gamma. Not reported in paper.
+
+short vs. medium vs. long delay when gamma = 0 vs. 1
+There is basically no learning in the long delay, 
+Those little peaks or dips in the long delay (if you zoom in) arise in TD so long as E doesn't come right after C. I added medium delay to also show the tiny dips.
+The key thing is that changing Gamma from 0 to 1 has essentially no impact in this paradigm, for short medium or long delay. 
+
+```{python}
+shortdelay = make_dataset(
+    n_days     = 24,
+    C_causes   = [(21, 1.0)],
+    E_hour     = 22,
+    LUSF_hours = [],
+    n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+    n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+    n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+    seed   = 42
+)
+
+mediumdelay = make_dataset(
+    n_days     = 24,
+    C_causes   = [(20, 1.0)],
+    E_hour     = 22,
+    LUSF_hours = [],
+    n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+    n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+    n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+    seed   = 42
+)
+
+longdelay = make_dataset(
+    n_days     = 24,
+    C_causes   = [(1, 1.0)],
+    E_hour     = 22,
+    LUSF_hours = [],
+    n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+    n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+    n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+    seed   = 42
+)
+
+
+shortdelay_g00 = run_td_model(
+    dataset    = shortdelay,
+    alpha      = 0.2,         # learning rate (0, 1]
+    beta       = 0.8,         # trace decay (0, 1)
+    gamma      = 0.0,         # discount factor (0, 1]
+    show_plots = False,
+    verbose    = False
+)
+
+shortdelay_g10 = run_td_model(
+    dataset    = shortdelay,
+    alpha      = 0.2,         # learning rate (0, 1]
+    beta       = 0.8,         # trace decay (0, 1)
+    gamma      = 1.0,         # discount factor (0, 1]
+    show_plots = False,
+    verbose    = False
+)
+
+mediumdelay_g00 = run_td_model(
+    dataset    = mediumdelay,
+    alpha      = 0.2,         # learning rate (0, 1]
+    beta       = 0.8,         # trace decay (0, 1)
+    gamma      = 0.0,         # discount factor (0, 1]
+    show_plots = False,
+    verbose    = False
+)
+
+mediumdelay_g10 = run_td_model(
+    dataset    = mediumdelay,
+    alpha      = 0.2,         # learning rate (0, 1]
+    beta       = 0.8,         # trace decay (0, 1)
+    gamma      = 1.0,         # discount factor (0, 1]
+    show_plots = False,
+    verbose    = False
+)
+
+longdelay_g00 = run_td_model(
+    dataset    = longdelay,
+    alpha      = 0.2,         # learning rate (0, 1]
+    beta       = 0.8,         # trace decay (0, 1)
+    gamma      = 0.0,         # discount factor (0, 1]
+    show_plots = False,
+    verbose    = False
+)
+
+longdelay_g10 = run_td_model(
+    dataset    = longdelay,
+    alpha      = 0.2,         # learning rate (0, 1]
+    beta       = 0.8,         # trace decay (0, 1)
+    gamma      = 1.0,         # discount factor (0, 1]
+    show_plots = False,
+    verbose    = False
+)
+
+print(f"w_C01 short delay,  gamma=0.0 : {shortdelay_g00['w_final'][0]:.4f}")
+print(f"w_C01 short delay,  gamma=1.0 : {shortdelay_g10['w_final'][0]:.4f}")
+print(f"w_C01 medium delay, gamma=0.0 : {mediumdelay_g00['w_final'][0]:.4f}")
+print(f"w_C01 medium delay, gamma=1.0 : {mediumdelay_g10['w_final'][0]:.4f}")
+print(f"w_C01 long delay,   gamma=0.0 : {longdelay_g00['w_final'][0]:.4f}")
+print(f"w_C01 long delay,   gamma=1.0 : {longdelay_g10['w_final'][0]:.4f}")
+
+fig = plot_td_timescale_comparison(
+    td_results_list     = [shortdelay_g00,  shortdelay_g10,
+                           mediumdelay_g00, mediumdelay_g10,
+                           longdelay_g00,   longdelay_g10],
+    labels              = ["Short delay (1hr),  gamma=0.0",
+                           "Short delay (1hr),  gamma=1.0",
+                           "Medium delay (2hr), gamma=0.0",
+                           "Medium delay (2hr), gamma=1.0",
+                           "Long delay (21hr),  gamma=0.0",
+                           "Long delay (21hr),  gamma=1.0"],
+    steps_per_hour_list = [1, 1, 1, 1, 1, 1],
+    show                = True
+)
+
+
+
+
+```
+
+
+
+# Modifying alpha - learning rate. Not reported in paper.
+```{python}
+dataset_hourly = make_dataset(
+    n_days     = 24,
+    C_causes   = [(16, 1.0)],
+    E_hour     = 22,
+    LUSF_hours = [],
+    n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+    n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+    n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+    seed   = 42
+)
+
+td_hourly_alpha02 = run_td_model(
+    dataset    = dataset_hourly,
+    alpha      = 0.2,        # learning rate (0, 1]
+    beta       = 0.8,        # trace decay (0, 1)
+    gamma      = 1.0,        # discount factor (0, 1]
+    show_plots = False,
+    verbose    = False
+)
+
+td_hourly_alpha05 = run_td_model(
+    dataset    = dataset_hourly,
+    alpha      = 0.5,        # learning rate (0, 1]
+    beta       = 0.8,        # trace decay (0, 1)
+    gamma      = 1.0,        # discount factor (0, 1]
+    show_plots = False,
+    verbose    = False
+)
+
+print(f"Final w_C01 (alpha = 0.2) : {td_hourly_alpha02['w_final'][0]:.4f}")
+print(f"Final w_C01 (alpha = 0.5) : {td_hourly_alpha05['w_final'][0]:.4f}")
+
+fig = plot_td_timescale_comparison(
+    td_results_list     = [td_hourly_alpha02, td_hourly_alpha05],
+    labels              = ["alpha = 0.2", "alpha = 0.5"],
+    steps_per_hour_list = [1, 1],
+    show                = True
+)
+
+
+```
+
+Final w_C01 (alpha = 0.2) : 0.1272
+Final w_C01 (alpha = 0.5) : 0.2357
+
+
+
+
+# Simulation 7. Informativeness – Changing the strength of C
+```{python}
+strength10 = make_dataset(
+    n_days     = 24,
+    C_causes   = [(16, 1.0)],
+    E_hour     = 22,
+    LUSF_hours = [],
+    n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+    n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+    n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+    seed   = 42
+)
+
+strength05 = make_dataset(
+    n_days     = 24,
+    C_causes   = [(16, 0.5)],
+    E_hour     = 22,
+    LUSF_hours = [],
+    n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+    n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+    n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+    seed   = 42
+)
+
+gal_strength10 = run_gallistel_model(dataset=strength10, verbose=True)
+gal_strength05  = run_gallistel_model(dataset=strength05,  verbose=True)
+
+results_table = pd.DataFrame({
+    "GPI": [gal_strength10["GPI"]["C01"], gal_strength05["GPI"]["C01"]],
+    "GRI": [gal_strength10["GRI"]["C01"], gal_strength05["GRI"]["C01"]]
+}, index=["cs = 1.0", "cs = 0.5"])
+
+print(results_table.round(3).to_string())
+
+```
+
+When causal strength is lowered from 1 to .5, Predictive Informativeness (GPI) gets weaker, but retrospective does not (GRI)
+            GPI  GRI
+cs = 1.0  8.000  8.0
+cs = 0.5  1.626  8.0
+
+
+
+
+# Simulation 8. Informativeness – Changing the number of other causes of E 
+```{python}
+causes2 = make_dataset(
+    n_days     = 24,
+    C_causes   = [(16, 1.0), (17, 1.0)],
+    E_hour     = 22,
+    LUSF_hours = [],
+    n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+    n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+    n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+    seed   = 42
+)
+
+cause1 = make_dataset(
+    n_days     = 24,
+    C_causes   = [(16, 1.0)],
+    E_hour     = 22,
+    LUSF_hours = [],
+    n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+    n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+    n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+    seed   = 42
+)
+
+gal_strength2 = run_gallistel_model(dataset=causes2, verbose=True)
+gal_strength1  = run_gallistel_model(dataset=cause1,  verbose=True)
+
+results_table = pd.DataFrame({
+    "GPI": [gal_strength2["GPI"]["C01"], gal_strength1["GPI"]["C01"]],
+    "GRI": [gal_strength2["GRI"]["C01"], gal_strength1["GRI"]["C01"]]
+}, index=["2 causes", "1 cause"])
+
+print(results_table.round(3).to_string())
+
+```
+
+When a second causes is added, retrospective informativeness (GRI) falls considerably more than prospective (GPI).
+            GPI    GRI
+2 causes  5.412  2.667
+1 cause   8.000  8.000
+
+
+# Simulation 9: Short vs. Long Delay
+1 vs. 21 hr delay with 24 trials, 1 cause.
+```{python}
+#| label: test-model-comparison
+results_short = run_analysis(
+    dataset_kwargs = dict(
+        n_days   = 24,
+        C_causes = [(21, 1.0)],   # C01 fires at hour 21, 1 hour before E
+        E_hour   = 22,
+        LCSF_hours = [],
+        n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+        n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+        n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+        seed   = 42
+    ),
+    models        = ["BayesianNoisyOr", "TD", "GPI", "GRI"],
+    n_datasets    = 10,
+    n_blocks      = 4,
+    draws         = 1000,
+    tune          = 500,
+    chains        = 2,
+    target_accept = 0.9,
+    random_seed   = 42,
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show_plots    = False,
+    verbose       = False
+)
+
+results_long = run_analysis(
+    dataset_kwargs = dict(
+        n_days   = 24,
+        C_causes = [(1, 1.0)],    # C01 fires at hour 1, 21 hours before E
+        E_hour   = 22,
+        LCSF_hours = [],
+        n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+        n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+        n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+        seed   = 42
+    ),
+    models        = ["BayesianNoisyOr", "TD", "GPI", "GRI"],
+    n_datasets    = 10,
+    n_blocks      = 4,
+    draws         = 1000,
+    tune          = 500,
+    chains        = 2,
+    target_accept = 0.9,
+    random_seed   = 42,
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show_plots    = False,
+    verbose       = False
+)
+
+table, fig = compare_datasets(
+    results_list     = [results_short, results_long],
+    labels           = ["ShortDelay (1hr)", "LongDelay (21hr)"],
+    alpha_avg        = 1.0,
+    alpha_individual = 0.0,
+    show             = True
+)
+
+
+```
+
+In the 21 hr delay condition, the causal strength for the long datasets is very low for all models and shows barely any learning
+============================================================
+  Dataset Comparison — C01 final estimate
+============================================================
+                 ShortDelay (1hr)  LongDelay (21hr)
+BayesianNoisyOr             0.853             0.098
+TD                          0.388             0.004
+GPI                        46.691             2.223
+GRI                        46.691             2.223
+
+
+# Simulation 10: Long delay can be learned with enough data
+21 hour delay but with 240 trials
+```{python}
+results_long = run_analysis(
+    dataset_kwargs = dict(
+        n_days   = 24*10,
+        C_causes = [(1, 1.0)],    # C01 fires at hour 1, 21 hours before E
+        E_hour   = 22,
+        LCSF_hours = [],
+        n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+        n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+        n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+        seed   = 42
+    ),
+    models        = ["BayesianNoisyOr", "TD", "GPI", "GRI"],
+    n_datasets    = 10,
+    n_blocks      = 4,
+    draws         = 1000,
+    tune          = 500,
+    chains        = 2,
+    target_accept = 0.9,
+    random_seed   = 42,
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show_plots    = False,
+    verbose       = False
+)
+
+
+```
+
+After 240 trials, Bayesian NoisyOr does learn and gets to about .8
+TD never gets very high maxing out at about .011. Perhaps that makes sense because the value represents the discounted prediction.
+GPI and GRI stay about flat - these don't excibit learning curves in general.
+
+
+
+
+
+
+
+# Simulation 11. Bayesian Model Confounds at different times
+```{python}
+n_days   = 48
+n_blocks = 4   # checkpoints at trial 12, 24, 36, 48
+
+mcmc_kwargs = dict(
+    draws=2000, tune=1000, chains=4, target_accept=0.9, random_seed=42
+)
+
+conditions_kwargs = {
+    "No confound"   : dict(n_days=n_days, C_causes=[(18, 1.0)], E_hour=22, LCSF_hours=[]),
+    "Conf hr 21": dict(n_days=n_days, C_causes=[(18, 1.0)], E_hour=22, LCSF_hours=[21]),
+    "Conf hr 20": dict(n_days=n_days, C_causes=[(18, 1.0)], E_hour=22, LCSF_hours=[20]),
+    "Conf hr 19": dict(n_days=n_days, C_causes=[(18, 1.0)], E_hour=22, LCSF_hours=[19]),
+    "Conf hr 18": dict(n_days=n_days, C_causes=[(18, 1.0)], E_hour=22, LCSF_hours=[18]),
+    "Conf hr 17": dict(n_days=n_days, C_causes=[(18, 1.0)], E_hour=22, LCSF_hours=[17]),
+    "Conf hr 16": dict(n_days=n_days, C_causes=[(18, 1.0)], E_hour=22, LCSF_hours=[16]),
+    "Conf hr 15": dict(n_days=n_days, C_causes=[(18, 1.0)], E_hour=22, LCSF_hours=[15]),
+}
+
+bn_results = {}
+for label, dk in conditions_kwargs.items():
+    bn_results[label] = run_analysis(
+        dataset_kwargs = dk,
+        models         = ["BayesianNoisyOr"],
+        n_datasets     = 1,
+        n_blocks       = n_blocks,
+        show_plots     = False,
+        verbose        = False,
+        **mcmc_kwargs
+    )
+
+tables, fig = compare_datasets(
+    results_list     = list(bn_results.values()),
+    labels           = list(bn_results.keys()),
+    alpha_avg        = 1.0,
+    alpha_individual = 0.0,
+    show             = True
+)
+
+```
+
+  C01:
+                 No confound  Conf hr 21  Conf hr 20  Conf hr 19  Conf hr 18  Conf hr 17  Conf hr 16  Conf hr 15
+BayesianNoisyOr        0.823       0.246       0.326        0.43       0.544       0.647       0.705       0.748
+
+  LCSF01_21:
+                 No confound  Conf hr 21  Conf hr 20  Conf hr 19  Conf hr 18  Conf hr 17  Conf hr 16  Conf hr 15
+BayesianNoisyOr          NaN       0.888         NaN         NaN         NaN         NaN         NaN         NaN
+
+  LCSF01_20:
+                 No confound  Conf hr 21  Conf hr 20  Conf hr 19  Conf hr 18  Conf hr 17  Conf hr 16  Conf hr 15
+BayesianNoisyOr          NaN         NaN       0.806         NaN         NaN         NaN         NaN         NaN
+
+  LCSF01_19:
+                 No confound  Conf hr 21  Conf hr 20  Conf hr 19  Conf hr 18  Conf hr 17  Conf hr 16  Conf hr 15
+BayesianNoisyOr          NaN         NaN         NaN        0.69         NaN         NaN         NaN         NaN
+
+  LCSF01_18:
+                 No confound  Conf hr 21  Conf hr 20  Conf hr 19  Conf hr 18  Conf hr 17  Conf hr 16  Conf hr 15
+BayesianNoisyOr          NaN         NaN         NaN         NaN       0.556         NaN         NaN         NaN
+
+  LCSF01_17:
+                 No confound  Conf hr 21  Conf hr 20  Conf hr 19  Conf hr 18  Conf hr 17  Conf hr 16  Conf hr 15
+BayesianNoisyOr          NaN         NaN         NaN         NaN         NaN       0.416         NaN         NaN
+
+  LCSF01_16:
+                 No confound  Conf hr 21  Conf hr 20  Conf hr 19  Conf hr 18  Conf hr 17  Conf hr 16  Conf hr 15
+BayesianNoisyOr          NaN         NaN         NaN         NaN         NaN         NaN       0.317         NaN
+
+  LCSF01_15:
+                 No confound  Conf hr 21  Conf hr 20  Conf hr 19  Conf hr 18  Conf hr 17  Conf hr 16  Conf hr 15
+BayesianNoisyOr          NaN         NaN         NaN         NaN         NaN         NaN         NaN       0.245
+
+
+
+# Simulation 12. Adding 20 Uncorrelated Lures at different times with 192 trials
+Only used one dataset
+
+```{python}
+#| label: test-model-comparison
+
+
+no_lure_16 = run_analysis(
+    dataset_kwargs = dict(
+        n_days   = 24*8,
+        C_causes = [(16, 1.0)],   # C01 fires at hour 14
+        E_hour   = 22,
+        LUSF_hours = [],
+        n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+        n_LUIF = 0, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+        n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+        seed   = 42
+    ),
+    models        = ["BayesianNoisyOr", "TD", "GPI", "GRI"],
+    n_datasets    = 1,
+    n_blocks      = 4,
+    draws         = 1000,
+    tune          = 500,
+    chains        = 2,
+    target_accept = 0.9,
+    random_seed   = 42,
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show_plots    = False,
+    verbose       = False
+)
+
+    # n_LUIR = 0,                     # N of lure uncorrelated interim fixed
+
+
+lure_uncorrelated_interim_CE = run_analysis(
+    dataset_kwargs = dict(
+        n_days   = 24*8,
+        C_causes = [(16, 1.0)],   # C01 fires at hour 14
+        E_hour   = 22,
+        LUSF_hours = [],
+        n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+        n_LUIF = 20, n_LUIR = 0, n_LUBF = 0, n_LUBR = 0, n_LUAR = 0,
+        n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+        seed   = 42
+    ),
+    models        = ["BayesianNoisyOr", "TD", "GPI", "GRI"],
+    n_datasets    = 1,
+    n_blocks      = 4,
+    draws         = 1000,
+    tune          = 500,
+    chains        = 2,
+    target_accept = 0.9,
+    random_seed   = 42,
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show_plots    = False,
+    verbose       = False
+)
+
+    # n_LUBR = 0,                     # N of lure uncorrelated before-C random
+
+lure_uncorrelated_before_C = run_analysis(
+    dataset_kwargs = dict(
+        n_days   = 24*8,
+        C_causes = [(16, 1.0)],   # C01 fires at hour 14
+        E_hour   = 22,
+        LUSF_hours = [],
+        n_LCIF = 0, n_LCIR = 0, n_LCBF = 0, n_LCBR = 0, n_LCAR = 0,
+        n_LUIF = 0, n_LUIR = 0, n_LUBF = 20, n_LUBR = 0, n_LUAR = 0,
+        n_LSIF = 0, n_LSBF = 0, n_LSAF = 0,
+        seed   = 42
+    ),
+    models        = ["BayesianNoisyOr", "TD", "GPI", "GRI"],
+    n_datasets    = 1,
+    n_blocks      = 4,
+    draws         = 1000,
+    tune          = 500,
+    chains        = 2,
+    target_accept = 0.9,
+    random_seed   = 42,
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show_plots    = False,
+    verbose       = False
+)
+
+
+
+tables, fig = compare_datasets(
+    results_list     = [no_lure_16, lure_uncorrelated_interim_CE, lure_uncorrelated_before_C],
+    labels           = ["No Lure 16", "Lure Uncorr Between C and E", "Lure Uncorr Before C"],
+    alpha_avg        = 1.0,
+    alpha_individual = 0.5,
+    show             = True
+)
+
+
+```
+
+============================================================
+  Dataset Comparison — final estimates by cause
+============================================================
+
+  C01:
+                 No Lure 16  Lure Uncorr Between C and E  Lure Uncorr Before C
+BayesianNoisyOr       0.932                        0.917                 0.920
+TD                    0.322                        0.557                 0.325
+GPI                   8.042                        8.042                 8.042
+GRI                   8.042                        8.042                 8.042
+
+
+
+
+
+
